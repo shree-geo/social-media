@@ -4,8 +4,6 @@ Payload shapes follow Meta's Messenger Platform webhook reference: ``object: "pa
 ``entry[].messaging[]`` with ``message`` / ``delivery`` / ``read`` / ``postback``.
 """
 
-import hashlib
-import hmac
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from typing import Any, ClassVar
@@ -26,9 +24,9 @@ from app.integrations.base import (
     SocialChannelAdapter,
     TransientSendError,
     Unsupported,
-    WebhookRejected,
 )
 from app.integrations.meta import graph
+from app.integrations.meta import webhooks as meta_webhooks
 
 # Messenger attachment types → our message types.
 _ATTACHMENT_TYPES: dict[str, MessageType] = {
@@ -62,23 +60,10 @@ class MessengerAdapter(SocialChannelAdapter):
     # --- webhooks -------------------------------------------------------------------
 
     def verify_subscription_challenge(self, params: Mapping[str, str]) -> str | None:
-        expected = get_settings().meta_webhook_verify_token
-        if (
-            expected
-            and params.get("hub.mode") == "subscribe"
-            and hmac.compare_digest(params.get("hub.verify_token", ""), expected)
-        ):
-            return params.get("hub.challenge")
-        return None
+        return meta_webhooks.verify_subscription_challenge(params)
 
     def validate_webhook(self, headers: Mapping[str, str], raw_body: bytes) -> None:
-        signature = headers.get("x-hub-signature-256", "")
-        if not signature.startswith("sha256="):
-            raise WebhookRejected("missing X-Hub-Signature-256")
-        secret = get_settings().meta_app_secret.encode()
-        expected = hmac.new(secret, raw_body, hashlib.sha256).hexdigest()
-        if not secret or not hmac.compare_digest(signature.removeprefix("sha256="), expected):
-            raise WebhookRejected("signature mismatch")
+        meta_webhooks.validate_signature(headers, raw_body)
 
     def parse_webhook(self, payload: Mapping[str, Any]) -> list[NormalizedEvent]:
         if payload.get("object") != "page":

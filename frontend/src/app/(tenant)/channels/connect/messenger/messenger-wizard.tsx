@@ -63,7 +63,19 @@ function Stepper({ current }: { current: Step }) {
   );
 }
 
-function Intro({ ready, busy, error, onContinue }: { ready: boolean; busy: boolean; error: string | null; onContinue: () => void }) {
+function Intro({
+  ready,
+  unavailable,
+  busy,
+  error,
+  onContinue,
+}: {
+  ready: boolean;
+  unavailable: boolean;
+  busy: boolean;
+  error: string | null;
+  onContinue: () => void;
+}) {
   return (
     <section>
       <h1 className="text-2xl font-semibold text-ink">Connect your Facebook Page</h1>
@@ -98,7 +110,7 @@ function Intro({ ready, busy, error, onContinue }: { ready: boolean; busy: boole
         </div>
       )}
       <Button className="mt-6 w-full sm:w-auto" onClick={onContinue} disabled={!ready} loading={busy} icon={MessageCircle}>
-        {ready ? "Continue with Facebook" : "Getting ready…"}
+        {ready ? "Continue with Facebook" : unavailable ? "Not available right now" : "Getting ready…"}
       </Button>
     </section>
   );
@@ -360,7 +372,7 @@ export function MessengerWizard() {
         Channels
       </Link>
       <Stepper current={step} />
-      {step === "intro" && <Intro ready={sdkReady} busy={busy} error={error ?? prepareError} onContinue={login} />}
+      {step === "intro" && <Intro ready={sdkReady} unavailable={preparation.isError} busy={busy} error={error ?? prepareError} onContinue={login} />}
       {step === "choose" && authorized && (
         <ChoosePages authorized={authorized} error={error} busy={busy} onConnect={connect} onRetry={restart} />
       )}

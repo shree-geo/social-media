@@ -167,3 +167,19 @@ async def exchange_for_long_lived(user_token: str) -> str:
     if not isinstance(token, str):
         raise GraphError("Meta did not return a long-lived token")
     return token
+
+
+async def exchange_code(code: str) -> str:
+    """Embedded Signup code (single use, short-lived) → business integration system user token."""
+    settings = get_settings()
+    data = await request(
+        "GET",
+        "/oauth/access_token",
+        token=app_access_token(),
+        params={"client_id": settings.meta_app_id, "client_secret": settings.meta_app_secret, "code": code},
+        proof=False,
+    )
+    token = data.get("access_token")
+    if not isinstance(token, str):
+        raise GraphError("Meta did not return an access token")
+    return token

@@ -48,6 +48,11 @@ const STEPS = [
   { key: "staff", title: "Add your staff", body: "Give each person their own login and role." },
 ] as const;
 
+const CONNECT_LINKS: Record<string, { href: string; label: string }> = {
+  facebook: { href: "/channels/connect/messenger", label: "Connect Facebook Page" },
+  whatsapp: { href: "/channels/connect/whatsapp", label: "Connect WhatsApp" },
+};
+
 function SetupSteps({ done }: { done: Set<string> }) {
   const next = STEPS.find((s) => !done.has(s.key))?.key;
   const progress = Math.round((done.size / STEPS.length) * 100);
@@ -85,12 +90,17 @@ function SetupSteps({ done }: { done: Set<string> }) {
                   <span className="sr-only">{complete ? " (done)" : isNext ? " (next step)" : ""}</span>
                 </p>
                 <p className="text-sm text-ink-muted">{step.body}</p>
-                {isNext && !complete && step.key === "facebook" && (
-                  <Link href="/channels/connect/messenger" className="mt-2 inline-flex min-h-9 items-center rounded-control bg-primary px-3 text-sm font-medium text-on-primary hover:bg-primary-hover">
-                    Connect Facebook Page
+                {isNext && !complete && step.key in CONNECT_LINKS && (
+                  <Link
+                    href={CONNECT_LINKS[step.key].href}
+                    className="mt-2 inline-flex min-h-9 items-center rounded-control bg-primary px-3 text-sm font-medium text-on-primary hover:bg-primary-hover"
+                  >
+                    {CONNECT_LINKS[step.key].label}
                   </Link>
                 )}
-                {isNext && !complete && step.key !== "facebook" && <p className="mt-1 text-xs font-medium text-primary">Available soon</p>}
+                {isNext && !complete && !(step.key in CONNECT_LINKS) && step.key !== "test" && (
+                  <p className="mt-1 text-xs font-medium text-primary">Available soon</p>
+                )}
               </div>
             </li>
           );

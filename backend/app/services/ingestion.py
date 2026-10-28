@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import runtime_sessionmaker, set_tenant_context
 from app.core.logging import get_logger
 from app.integrations import registry
-from app.integrations.base import InboundMessage, MessageStatusUpdate, NormalizedEvent, ReadReceipt
+from app.integrations.base import AccountEvent, InboundMessage, MessageStatusUpdate, NormalizedEvent, ReadReceipt
 from app.models import (
     ChannelAccount,
     Conversation,
@@ -311,10 +311,73 @@ async def _handle_read(
     return {"type": "message.status", "conversation_id": conversation_id, "status": "read"}
 
 
+def _digits(value: object) -> str:
+    return "".join(ch for ch in str(value or "") if ch.isdigit())
+
+
+# Account events Meta sends that mean the business must act (WhatsApp Cloud API account webhooks).
+_ACCOUNT_PROBLEMS = {"DISABLED_UPDATE", "ACCOUNT_VIOLATION", "ACCOUNT_RESTRICTION", "BANNED"}
+
+
+async def _handle_account_event(session: AsyncSession, provider: str, event: AccountEvent) -> str:
+    """Display-name reviews, quality ratings and account restrictions → channel health."""
+    row = (
+        await session.execute(
+            text("SELECT tenant_id, connection_id FROM route_channel_business(:p, :b)"),
+            {"p": provider, "b": event.channel_external_id},
+        )
+    ).first()
+    if row is None:
+        return "ignored"
+    await set_tenant_context(session, row.tenant_id)
+    accounts = (
+        (
+            await session.execute(
+                select(ChannelAccount).where(
+                    ChannelAccount.connection_id == row.connection_id, ChannelAccount.status == "connected"
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    phone = _digits(event.data.get("display_phone_number"))
+    targets = [a for a in accounts if not phone or _digits(a.display_phone) == phone] or list(accounts)
+    data = event.data
+    for account in targets:
+        if event.kind == "phone_number_name_update":
+            decision = str(data.get("decision") or "").upper()
+            account.name_status = decision or account.name_status
+            if decision == "APPROVED":
+                account.display_name = data.get("requested_verified_name") or account.display_name
+                account.health_status, account.health_reason = "healthy", None
+            elif decision in ("REJECTED", "DECLINED"):
+                account.health_status = "action_needed"
+                account.health_reason = "Meta didn't approve your display name. Use a name that matches your business, then submit it again."
+        elif event.kind == "phone_number_quality_update":
+            quality_event = str(data.get("event") or "").upper()
+            account.quality_rating = quality_event or account.quality_rating
+            if quality_event in ("FLAGGED", "DOWNGRADE"):
+                account.health_status = "action_needed"
+                account.health_reason = "WhatsApp lowered this number's quality rating. Only message people who contacted you, and reply promptly."
+            elif quality_event in ("UNFLAGGED", "UPGRADE") and account.health_status == "action_needed":
+                account.health_status, account.health_reason = "healthy", None
+        elif event.kind == "account_update" and str(data.get("event") or "").upper() in _ACCOUNT_PROBLEMS:
+            account.health_status = "action_needed"
+            account.health_reason = (
+                "Meta has restricted this WhatsApp account. Check WhatsApp Manager for details, or contact us."
+            )
+        account.provider_metadata = {**(account.provider_metadata or {}), f"last_{event.kind}": dict(data)}
+    return "processed" if targets else "ignored"
+
+
 async def _process_one(provider: str, event: NormalizedEvent) -> str:
     """Returns ``processed`` or ``ignored``. Raises :class:`RetryLater` for transient conditions."""
+    if isinstance(event, AccountEvent):
+        async with runtime_sessionmaker()() as session, session.begin():
+            return await _handle_account_event(session, provider, event)
     if not isinstance(event, InboundMessage | MessageStatusUpdate | ReadReceipt):
-        return "ignored"  # account-level events are handled by the channel health checks
+        return "ignored"
 
     async with runtime_sessionmaker()() as session, session.begin():
         routed = await _route(session, provider, event.channel_external_id)

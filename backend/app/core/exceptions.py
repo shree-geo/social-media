@@ -63,10 +63,15 @@ def _problem(request: Request, status: int, code: str, title: str, detail: str, 
     return JSONResponse(body, status_code=status, media_type=PROBLEM_JSON)
 
 
+def problem_response(request: Request, exc: AppError) -> JSONResponse:
+    """The error response for ``exc``, for endpoints that must commit before reporting a failure."""
+    return _problem(request, exc.status, exc.code, exc.title, exc.detail, **exc.extra)
+
+
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppError)
     async def _app_error(request: Request, exc: AppError) -> JSONResponse:
-        return _problem(request, exc.status, exc.code, exc.title, exc.detail, **exc.extra)
+        return problem_response(request, exc)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:

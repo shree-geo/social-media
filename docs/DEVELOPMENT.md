@@ -146,6 +146,22 @@ In the Meta app dashboard:
 
 Then log in as a business Owner → **Channels → Connect Facebook Page**. Customer names on Messenger need Meta's User Profile access; without it new customers show as "Unknown customer" until renamed.
 
+## Connecting a real WhatsApp number
+
+WhatsApp uses the same Meta app and `.env` values as Messenger, plus:
+
+```env
+META_LOGIN_CONFIG_ID_WHATSAPP=...    # Facebook Login for Business configuration of type "WhatsApp Embedded Signup"
+```
+
+In the Meta app dashboard:
+
+1. Add the **WhatsApp** product. To onboard other businesses' numbers the app must be a **Tech Provider** (business verification + app review for `whatsapp_business_management`, `whatsapp_business_messaging`).
+2. **Facebook Login for Business → Configurations**: create an *Embedded Signup* configuration with those two permissions; copy its ID into `META_LOGIN_CONFIG_ID_WHATSAPP`. For "Keep using my WhatsApp Business app", enable coexistence onboarding for the configuration if Meta offers it for your region.
+3. **WhatsApp → Configuration → Webhook**: callback `https://<tunnel>/api/v1/webhooks/whatsapp`, same verify token; subscribe to `messages`, `smb_message_echoes`, `phone_number_quality_update`, `phone_number_name_update`, `account_update`.
+
+Then **Channels → Connect WhatsApp**. Use a spare SIM that is not on WhatsApp for the new-number option. If registration fails because of an old two-step verification PIN, remove it in WhatsApp Manager and press *Try again* (the wizard resumes; it doesn't need Meta's window again).
+
 ## Meta webhooks locally
 
 Meta must reach a public HTTPS URL. Use a tunnel (Cloudflare Tunnel or ngrok) to `http://localhost:8080` and configure the callback URLs from `ONBOARDING_AND_CHANNEL_SETUP.md` §2 in the Meta app dashboard.

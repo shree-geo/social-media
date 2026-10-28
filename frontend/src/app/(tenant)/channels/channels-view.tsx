@@ -85,6 +85,13 @@ function ChannelRow({ channel, onDisconnect }: { channel: ChannelCard; onDisconn
         {channel.health_reason && channel.health_status !== "healthy" && (
           <p className="mt-0.5 text-sm text-ink-muted">{channel.health_reason}</p>
         )}
+        {channel.provider === "whatsapp" && (
+          <p className="mt-0.5 text-sm text-ink-muted">
+            {channel.display_phone}
+            {channel.coexistence ? " · also on your WhatsApp Business app" : ""}
+            {channel.name_status && channel.name_status.toUpperCase() !== "APPROVED" ? " · display name under review" : ""}
+          </p>
+        )}
       </div>
       {connected && (
         <dl className="tabular grid grid-cols-2 gap-x-6 text-sm">
@@ -95,9 +102,9 @@ function ChannelRow({ channel, onDisconnect }: { channel: ChannelCard; onDisconn
         </dl>
       )}
       <div className="flex gap-2">
-        {(channel.health_status === "action_needed" || !connected) && channel.provider === "messenger" && (
+        {(channel.health_status === "action_needed" || !connected) && (
           <Link
-            href="/channels/connect/messenger"
+            href={`/channels/connect/${channel.provider}`}
             className="inline-flex min-h-9 items-center rounded-control bg-primary px-3 text-sm font-medium text-on-primary hover:bg-primary-hover"
           >
             Reconnect
@@ -133,7 +140,7 @@ export function ChannelsView() {
           {data.items.length === 0 ? (
             <div className="mb-6 rounded-panel border border-line bg-surface">
               <EmptyState icon={Plug} title="No channels connected yet">
-                Connect your Facebook Page so customer messages arrive here. WhatsApp is coming next.
+                Connect your Facebook Page or WhatsApp number so customer messages arrive here.
               </EmptyState>
             </div>
           ) : (
@@ -163,11 +170,22 @@ export function ChannelsView() {
                 </Link>
               )}
             </div>
-            <div className="rounded-panel border border-dashed border-line-strong p-5">
+            <div className="rounded-panel border border-line bg-surface p-5">
               <ChannelTag channel="whatsapp" />
               <p className="mt-1 font-semibold text-ink">WhatsApp</p>
-              <p className="mt-1 text-sm text-ink-muted">Use a new number or keep your WhatsApp Business app.</p>
-              <p className="mt-4 text-sm text-ink-subtle">Coming next.</p>
+              <p className="mt-1 text-sm text-ink-muted">About 10 minutes. Use a new number or keep your WhatsApp Business app.</p>
+              {!data.whatsapp_available ? (
+                <p className="mt-4 text-sm text-ink-subtle">Available once our Meta app is approved.</p>
+              ) : data.whatsapp_limit != null && data.whatsapp_used >= data.whatsapp_limit ? (
+                <p className="mt-4 text-sm text-attention-ink">Your package allows {data.whatsapp_limit} WhatsApp number(s). Ask us about upgrading.</p>
+              ) : (
+                <Link
+                  href="/channels/connect/whatsapp"
+                  className="mt-4 inline-flex min-h-11 items-center rounded-control bg-primary px-4 font-medium text-on-primary hover:bg-primary-hover"
+                >
+                  Connect WhatsApp
+                </Link>
+              )}
             </div>
           </div>
         </>

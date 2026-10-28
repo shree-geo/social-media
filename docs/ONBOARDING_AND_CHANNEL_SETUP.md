@@ -375,7 +375,7 @@ B4  Connected
 |---|---|---|
 | B1 | `POST /api/v1/channels/setup-sessions {provider: whatsapp, mode: new_number \| coexistence}` | creates setup session; permission + plan limit check |
 | B2 | Loads Facebook JS SDK; `FB.login` with `config_id = META_LOGIN_CONFIG_ID_WHATSAPP`, `response_type=code`, `override_default_response_type`, `extras` (feature type for coexistence, session-info v3). Listens for the Embedded Signup `message` event → receives `waba_id`, `phone_number_id` (or cancel step / error) | — |
-| B2→B3 | `POST …/setup-sessions/{id}/complete {code, waba_id, phone_number_id}` | exchanges `code` → **business integration token** (encrypted → `channel_credentials`); reads WABA + phone number details; **checks the number isn't connected to another tenant**; subscribes our app to the WABA webhooks: `POST /{waba-id}/subscribed_apps`; **registers** the number for Cloud API (new-number mode): `POST /{phone-number-id}/register` with a generated 6-digit two-step PIN (stored encrypted); coexistence mode: skips register, starts history/contacts sync if chosen; creates `channel_connection` + `channel_account` (display phone, display name, name status, quality rating); audit `CHANNEL_CONNECTED` |
+| B2→B3 | `POST …/setup-sessions/{id}/whatsapp {state, code, waba_id, phone_number_id}` | resumable steps, each recorded in the setup session: **token** (exchange the single-use `code` for the business integration token; kept encrypted in the session so a retry never needs the code again) → **verify** (`debug_token`: our app, valid, `whatsapp_business_management` + `whatsapp_business_messaging`, and granular scopes include this WABA; the phone number is in `/{waba_id}/phone_numbers`; not connected to another business; plan limit) → **subscribed** (`POST /{waba_id}/subscribed_apps`, verified by reading back) → **saved** (connection per WABA with the encrypted business token; account per number; audit `CHANNEL_CONNECTED`) → **registered** (new-number mode, only if the number isn't already on the Cloud API: `POST /{phone_number_id}/register` with a generated 6-digit PIN stored encrypted). Coexistence mode skips registration. Errors are returned *after* the progress commits, so "Try again" continues from the failed step |
 | B4 | SSE for `message.created`; shows display-name status | beat job refreshes display-name status / quality rating daily; account webhooks update them live |
 
 Each backend step is **idempotent and resumable**: the setup session records which steps succeeded, so if B3 fails halfway, [Try again] continues from the failed step instead of starting over in Meta's pop-up.
@@ -489,8 +489,9 @@ POST /api/v1/onboarding/checklist/dismiss
 
 POST /api/v1/channels/setup-sessions                     {provider, mode}
 POST /api/v1/channels/setup-sessions/{id}/authorize    {state, access_token}   (Messenger)
-POST /api/v1/channels/setup-sessions/{id}/complete       {page_ids} | {code, waba_id, phone_number_id}
-POST /api/v1/channels/setup-sessions/{id}/cancel
+POST /api/v1/channels/setup-sessions/{id}/complete       {page_ids}                                   (Messenger)
+POST /api/v1/channels/setup-sessions/{id}/whatsapp       {state, code?, waba_id, phone_number_id}     (WhatsApp, resumable)
+POST /api/v1/channels/setup-sessions/{id}/cancel         {step?, error?}  (where Meta's window was closed)
 GET  /api/v1/channels                                    (cards + health)
 POST /api/v1/channels/{id}/disconnect
 
