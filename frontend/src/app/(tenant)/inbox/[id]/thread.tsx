@@ -1,7 +1,7 @@
 "use client";
 
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Lock, Paperclip, SendHorizontal, UserRound } from "lucide-react";
+import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Lock, Paperclip, SendHorizontal, ShoppingBag, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Fragment, useEffect, useRef, useState } from "react";
@@ -182,6 +182,7 @@ export function Thread() {
   const queryClient = useQueryClient();
   const me = useMe();
   const canReply = me.data?.permissions.includes("conversation.write") ?? false;
+  const canOrder = me.data?.permissions.includes("order.write") ?? false;
 
   const conversation = useQuery({
     queryKey: ["conversation", id],
@@ -210,7 +211,9 @@ export function Thread() {
 
   const bottom = useRef<HTMLDivElement>(null);
   const newestId = messages.data?.pages[0]?.items[0]?.id;
-  useEffect(() => bottom.current?.scrollIntoView({ block: "end" }), [newestId]);
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: "end" });
+  }, [newestId]);
 
   if (conversation.error) {
     return (
@@ -238,6 +241,16 @@ export function Thread() {
           <p className="truncate text-base font-semibold text-ink">{c.customer.display_name}</p>
           <ChannelTag channel={c.provider} />
         </div>
+        {canOrder && (
+          <Link
+            href={`/orders/new?conversation=${c.id}`}
+            className="inline-flex items-center gap-1.5 rounded-control bg-primary px-3 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover"
+          >
+            <ShoppingBag className="size-4" aria-hidden />
+            <span className="hidden sm:inline">Create order</span>
+            <span className="sm:hidden">Order</span>
+          </Link>
+        )}
         <Link
           href={`/customers/${c.customer.id}`}
           className="inline-flex items-center gap-1.5 rounded-control border border-line px-3 py-2 text-sm text-ink-muted hover:border-line-strong hover:text-ink"

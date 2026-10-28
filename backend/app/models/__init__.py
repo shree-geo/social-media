@@ -1,6 +1,16 @@
 """All models are imported here so Alembic sees the full metadata."""
 
 from app.models.base import Base
+from app.models.catalogue import (
+    Inventory,
+    InventoryTransaction,
+    Product,
+    ProductCategory,
+    ProductImage,
+    ProductPrice,
+    ProductVariant,
+    TaxRate,
+)
 from app.models.channels import (
     ChannelAccount,
     ChannelConnection,
@@ -43,6 +53,7 @@ from app.models.platform import (
     TenantSettings,
     UsageRecord,
 )
+from app.models.sales import Invoice, InvoiceItem, Order, OrderItem, OrderStatusHistory
 from app.models.system import AuditLog, DocumentSequence, IdempotencyKey, Notification, StoredObject
 
 __all__ = [
@@ -64,16 +75,28 @@ __all__ = [
     "CustomerTagLink",
     "DocumentSequence",
     "IdempotencyKey",
+    "Inventory",
+    "InventoryTransaction",
+    "Invoice",
+    "InvoiceItem",
     "MembershipRole",
     "Message",
     "MessageAttachment",
     "MessageEvent",
     "Notification",
+    "Order",
+    "OrderItem",
+    "OrderStatusHistory",
     "Permission",
     "Plan",
     "PlanFeature",
     "PlanPrice",
     "PlatformUser",
+    "Product",
+    "ProductCategory",
+    "ProductImage",
+    "ProductPrice",
+    "ProductVariant",
     "RefreshToken",
     "Role",
     "RolePermission",
@@ -81,6 +104,7 @@ __all__ = [
     "Subscription",
     "SubscriptionHistory",
     "SubscriptionPayment",
+    "TaxRate",
     "Tenant",
     "TenantMembership",
     "TenantOnboarding",

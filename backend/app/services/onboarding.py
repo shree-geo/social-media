@@ -22,7 +22,7 @@ from app.models import (
     TenantOnboarding,
     TenantSettings,
 )
-from app.services import audit, numbering, users
+from app.services import audit, catalogue, numbering, users
 from app.services.audit import RequestInfo
 from app.services.subscriptions import effective_status, period_end, tenant_today
 from app.services.users import LoginDetails
@@ -243,6 +243,7 @@ async def create_tenant(
     session.add(tenant)
     await session.flush()
     session.add_all([TenantSettings(tenant_id=tenant.id), TenantOnboarding(tenant_id=tenant.id)])
+    await catalogue.ensure_default_tax_rates(session, tenant.id, data.vat_registered)
 
     if data.trial_days:
         trial_end = data.start_date + timedelta(days=data.trial_days - 1)

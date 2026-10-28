@@ -20,6 +20,7 @@ from app.models import (
     CustomerDuplicateCandidate,
     CustomerIdentity,
     CustomerNote,
+    Order,
 )
 from app.schemas.auth import StrictModel
 from app.services import audit, customers, phones
@@ -88,8 +89,24 @@ class ConversationRef(BaseModel):
     last_message_preview: str | None
 
 
+class OrderRef(BaseModel):
+    id: uuid.UUID
+    order_number: str
+    status: str
+    grand_total: Decimal
+    payment_status: str
+    created_at: datetime
+
+
+class SalesSummary(BaseModel):
+    orders: int
+    total_sales: Decimal
+    outstanding: Decimal
+    last_order_at: datetime | None
+
+
 class Customer360(BaseModel):
-    """Orders, invoices, deliveries and payments are added here as Phase 5-6 ship."""
+    """Deliveries and payments join this view in Phase 6."""
 
     id: uuid.UUID
     display_name: str
@@ -106,6 +123,8 @@ class Customer360(BaseModel):
     notes: list[NoteOut]
     conversations: list[ConversationRef]
     open_duplicates: int
+    sales: SalesSummary
+    orders: list[OrderRef]
 
 
 class CustomerCreate(StrictModel):
@@ -348,6 +367,25 @@ async def get_customer(customer_id: uuid.UUID, ctx: Reader) -> Customer360:
             .order_by(Conversation.last_message_at.desc().nulls_last())
         )
     ).scalars()
+    counted = Order.status.not_in(("CANCELLED", "REJECTED"))
+    count, total, outstanding, last = (
+        await session.execute(
+            select(
+                func.count().filter(counted),
+                func.coalesce(func.sum(Order.grand_total).filter(counted), 0),
+                func.coalesce(func.sum(Order.amount_due).filter(counted), 0),
+                func.max(Order.created_at),
+            ).where(Order.tenant_id == tid, Order.customer_id == c.id)
+        )
+    ).one()
+    recent_orders = (
+        await session.execute(
+            select(Order)
+            .where(Order.tenant_id == tid, Order.customer_id == c.id)
+            .order_by(Order.created_at.desc())
+            .limit(10)
+        )
+    ).scalars()
     open_duplicates = (
         await session.execute(
             select(func.count())
@@ -406,6 +444,18 @@ async def get_customer(customer_id: uuid.UUID, ctx: Reader) -> Customer360:
             for cv in conversations
         ],
         open_duplicates=open_duplicates,
+        sales=SalesSummary(orders=count, total_sales=total, outstanding=outstanding, last_order_at=last),
+        orders=[
+            OrderRef(
+                id=o.id,
+                order_number=o.order_number,
+                status=o.status,
+                grand_total=o.grand_total,
+                payment_status=o.payment_status,
+                created_at=o.created_at,
+            )
+            for o in recent_orders
+        ],
     )
 
 

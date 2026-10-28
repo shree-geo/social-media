@@ -124,6 +124,11 @@ def api_env(database_urls: DatabaseUrls) -> Iterator[None]:
         DATABASE_PLATFORM_URL=database_urls.platform.render_as_string(hide_password=False),
         # This project's dev Redis (docker-compose.dev.yml), not whatever runs on 6379.
         REDIS_URL=os.environ.get("INTEGRATION_REDIS_URL", "redis://localhost:6381/15"),
+        # This project's dev S3 (SeaweedFS), separate bucket for tests.
+        S3_ENDPOINT=os.environ.get("INTEGRATION_S3_ENDPOINT", "http://localhost:8343"),
+        S3_ACCESS_KEY=os.environ.get("INTEGRATION_S3_ACCESS_KEY", "local-access-key"),
+        S3_SECRET_KEY=os.environ.get("INTEGRATION_S3_SECRET_KEY", "local-secret-key-change-me"),
+        S3_BUCKET="socialcommerce-test",
     )
     get_settings.cache_clear()
     database._runtime_engine = database._platform_engine = None

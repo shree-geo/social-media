@@ -1,15 +1,16 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, ArrowLeft, Mail, MessagesSquare, Phone, ShoppingBag, StickyNote } from "lucide-react";
+import { AlertCircle, ArrowLeft, Mail, MessagesSquare, Phone, Plus, ShoppingBag, StickyNote } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
 import { useMe } from "@/components/tenant-shell";
-import { Alert, Avatar, Button, ChannelTag, EmptyState, Panel, Spinner } from "@/components/ui";
+import { Alert, Avatar, Button, ChannelTag, EmptyState, Panel, Pill, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { formatPhone, formatTime, type Customer360 } from "@/lib/inbox";
+import { PAYMENT_LABEL, STATUS_LABEL, STATUS_TONE, formatMoney } from "@/lib/sales";
 
 function longDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" });
@@ -47,6 +48,7 @@ export function CustomerProfile() {
   if (!customer.data) return <Spinner />;
   const c = customer.data;
   const canWrite = me.data?.permissions.includes("customer.write") ?? false;
+  const canOrder = me.data?.permissions.includes("order.write") ?? false;
   const channels = [...new Set(c.identities.map((i) => i.provider))];
 
   return (
@@ -98,11 +100,62 @@ export function CustomerProfile() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="grid content-start gap-6">
-          <Panel title="Orders and payments">
-            <div className="flex items-start gap-3 text-sm text-ink-muted">
-              <ShoppingBag className="mt-0.5 size-5 shrink-0 text-ink-subtle" aria-hidden />
-              <p>Orders, invoices, deliveries and payments for {c.display_name.split(" ")[0]} will appear here once sales are switched on.</p>
-            </div>
+          <Panel
+            title="Orders"
+            actions={
+              canOrder && (
+                <Link
+                  href={`/orders/new?${c.conversations[0] ? `conversation=${c.conversations[0].id}` : `customer=${c.id}`}`}
+                  className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong px-3 text-sm font-medium text-ink hover:bg-sunken"
+                >
+                  <Plus className="size-4" aria-hidden />
+                  New order
+                </Link>
+              )
+            }
+          >
+            {c.sales.orders === 0 ? (
+              <div className="flex items-start gap-3 text-sm text-ink-muted">
+                <ShoppingBag className="mt-0.5 size-5 shrink-0 text-ink-subtle" aria-hidden />
+                <p>No orders from {c.display_name.split(" ")[0]} yet.</p>
+              </div>
+            ) : (
+              <>
+                <dl className="mb-4 grid grid-cols-3 gap-3 text-center">
+                  <div className="rounded-control bg-sunken px-2 py-3">
+                    <dt className="text-xs text-ink-muted">Orders</dt>
+                    <dd className="tabular text-lg font-semibold text-ink">{c.sales.orders}</dd>
+                  </div>
+                  <div className="rounded-control bg-sunken px-2 py-3">
+                    <dt className="text-xs text-ink-muted">Bought</dt>
+                    <dd className="tabular text-lg font-semibold text-ink">{formatMoney(c.sales.total_sales)}</dd>
+                  </div>
+                  <div className="rounded-control bg-sunken px-2 py-3">
+                    <dt className="text-xs text-ink-muted">To collect</dt>
+                    <dd className="tabular text-lg font-semibold text-ink">{formatMoney(c.sales.outstanding)}</dd>
+                  </div>
+                </dl>
+                <ul className="-mx-5 -mb-4 divide-y divide-line border-t border-line">
+                  {c.orders.map((o) => (
+                    <li key={o.id}>
+                      <Link href={`/orders/${o.id}`} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-sunken/60">
+                        <span className="min-w-0">
+                          <span className="flex flex-wrap items-center gap-2">
+                            <span className="tabular font-medium text-ink">{o.order_number}</span>
+                            <Pill tone={STATUS_TONE[o.status]}>{STATUS_LABEL[o.status] ?? o.status}</Pill>
+                          </span>
+                          <span className="block text-xs text-ink-subtle">{formatTime(o.created_at)}</span>
+                        </span>
+                        <span className="text-right">
+                          <span className="tabular block font-medium text-ink">{formatMoney(o.grand_total, "NPR")}</span>
+                          <span className="block text-xs text-ink-subtle">{PAYMENT_LABEL[o.payment_status]}</span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )}
           </Panel>
 
           <Panel title="Chats">

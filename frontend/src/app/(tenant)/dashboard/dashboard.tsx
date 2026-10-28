@@ -51,6 +51,7 @@ const STEPS = [
 const CONNECT_LINKS: Record<string, { href: string; label: string }> = {
   facebook: { href: "/channels/connect/messenger", label: "Connect Facebook Page" },
   whatsapp: { href: "/channels/connect/whatsapp", label: "Connect WhatsApp" },
+  products: { href: "/products", label: "Add products" },
 };
 
 function SetupSteps({ done }: { done: Set<string> }) {
@@ -120,6 +121,11 @@ function OwnerSetup() {
   if (connected.some((c) => c.provider === "messenger")) done.add("facebook");
   if (connected.some((c) => c.provider === "whatsapp")) done.add("whatsapp");
   if (connected.some((c) => c.last_webhook_at)) done.add("test");
+  const products = useQuery({
+    queryKey: ["products", "any"],
+    queryFn: () => api<{ items: unknown[] }>("tenant", "GET", "/api/v1/products?limit=1"),
+  });
+  if ((products.data?.items.length ?? 0) > 0) done.add("products");
   return <SetupSteps done={done} />;
 }
 

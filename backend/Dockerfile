@@ -9,6 +9,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 COPY --from=ghcr.io/astral-sh/uv:0.12.19 /uv /usr/local/bin/uv
+# Pango/HarfBuzz for invoice PDFs (WeasyPrint): correct Devanagari shaping. Fonts are bundled in app/assets/fonts.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b fontconfig \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # ---- dependencies (cached layer) ----

@@ -25,6 +25,8 @@ from app.models import (
     CustomerMerge,
     CustomerNote,
     CustomerTagLink,
+    Invoice,
+    Order,
 )
 from app.services import audit, phones
 from app.services.audit import RequestInfo
@@ -223,13 +225,16 @@ async def suggest_from_message_text(
 
 # --- merge / unmerge ------------------------------------------------------------------
 
-# Tables whose rows follow the customer on merge. Orders, invoices, deliveries and
-# payments join this list when their modules ship (same mechanism).
+# Tables whose rows follow the customer on merge. Deliveries and payments join this
+# list when their module ships (same mechanism). Invoices keep their printed buyer
+# (``buyer_snapshot``); only the internal link moves.
 _MOVABLE: tuple[tuple[str, Any], ...] = (
     ("customer_identities", CustomerIdentity),
     ("conversations", Conversation),
     ("customer_addresses", CustomerAddress),
     ("customer_notes", CustomerNote),
+    ("orders", Order),
+    ("invoices", Invoice),
 )
 
 

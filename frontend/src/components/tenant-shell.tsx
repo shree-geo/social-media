@@ -1,7 +1,18 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Home, LogOut, MessageCircle, MessagesSquare, Plug, Users, type LucideIcon } from "lucide-react";
+import {
+  Home,
+  LogOut,
+  MessageCircle,
+  MessagesSquare,
+  Menu,
+  Package,
+  Plug,
+  ShoppingBag,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
@@ -12,14 +23,19 @@ import { brand } from "@/config/brand";
 import { ApiError, api, type Me } from "@/lib/api";
 import type { ConversationPage } from "@/lib/inbox";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; permission: string | null; badge?: number };
+type NavItem = { href: string; label: string; icon: LucideIcon; permission: string | null; phone: boolean; badge?: number };
 
-const NAV: Omit<NavItem, "badge">[] = [
-  { href: "/dashboard", label: "Home", icon: Home, permission: null },
-  { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "conversation.read" },
-  { href: "/customers", label: "Customers", icon: Users, permission: "customer.read" },
-  { href: "/channels", label: "Channels", icon: Plug, permission: "channel.manage" },
+// ``phone``: shown in the phone tab bar; the rest are under "More" there.
+export const NAV: Omit<NavItem, "badge">[] = [
+  { href: "/dashboard", label: "Home", icon: Home, permission: null, phone: true },
+  { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "conversation.read", phone: true },
+  { href: "/orders", label: "Orders", icon: ShoppingBag, permission: "order.read", phone: true },
+  { href: "/customers", label: "Customers", icon: Users, permission: "customer.read", phone: true },
+  { href: "/products", label: "Products", icon: Package, permission: "product.read", phone: false },
+  { href: "/channels", label: "Channels", icon: Plug, permission: "channel.manage", phone: false },
 ];
+
+const MORE: NavItem = { href: "/more", label: "More", icon: Menu, permission: null, phone: true };
 
 export function useMe() {
   return useQuery({ queryKey: ["me"], queryFn: () => api<Me>("tenant", "GET", "/api/v1/auth/me") });
@@ -104,6 +120,9 @@ export function TenantShell({ children }: { children: ReactNode }) {
     badge: item.href === "/inbox" ? waiting : undefined,
   }));
 
+  const hidden = nav.filter((item) => !item.phone);
+  const phoneNav = hidden.length ? [...nav.filter((item) => item.phone), MORE] : nav;
+
   async function logout() {
     await api("tenant", "POST", "/api/v1/auth/logout").catch(() => undefined);
     router.replace("/login");
@@ -161,10 +180,10 @@ export function TenantShell({ children }: { children: ReactNode }) {
       <nav
         aria-label="Main"
         className="fixed inset-x-0 bottom-0 z-20 grid border-t border-line bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
-        style={{ gridTemplateColumns: `repeat(${nav.length}, minmax(0, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${phoneNav.length}, minmax(0, 1fr))` }}
       >
-        <Suspense fallback={nav.map((item) => <NavLink key={item.href} item={item} variant="bottom" active={false} />)}>
-          <NavLinks items={nav} variant="bottom" />
+        <Suspense fallback={phoneNav.map((item) => <NavLink key={item.href} item={item} variant="bottom" active={false} />)}>
+          <NavLinks items={phoneNav} variant="bottom" />
         </Suspense>
       </nav>
     </div>

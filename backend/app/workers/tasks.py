@@ -2,7 +2,7 @@ import uuid
 
 from app.core.database import platform_sessionmaker
 from app.core.logging import get_logger
-from app.services import channels, ingestion, messaging, onboarding
+from app.services import channels, ingestion, invoices, messaging, onboarding
 from app.workers.celery_app import celery_app, run_async
 from app.workers.queue import enqueue
 
@@ -69,3 +69,21 @@ def check_channel_health() -> dict[str, int]:
     counts = run_async(channels.check_health())
     log.info("channel_health_checked", **counts)
     return counts
+
+
+async def _render_invoice_pdf(tenant_id: uuid.UUID, invoice_id: uuid.UUID) -> bool:
+    from app.core.database import runtime_sessionmaker, set_tenant_context
+    from app.models import Invoice
+
+    async with runtime_sessionmaker()() as session, session.begin():
+        await set_tenant_context(session, tenant_id)
+        invoice = await session.get(Invoice, invoice_id)
+        if invoice is None or invoice.pdf_object_id:
+            return False
+        await invoices.pdf_bytes(session, invoice)
+    return True
+
+
+@celery_app.task(name="invoices.render_pdf")
+def render_invoice_pdf(tenant_id: str, invoice_id: str) -> bool:
+    return run_async(_render_invoice_pdf(uuid.UUID(tenant_id), uuid.UUID(invoice_id)))

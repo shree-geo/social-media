@@ -51,6 +51,8 @@ export type Customer360 = {
   notes: { id: string; body: string; created_at: string }[];
   conversations: { id: string; provider: string; last_message_at: string | null; last_message_preview: string | null }[];
   open_duplicates: number;
+  sales: { orders: number; total_sales: string; outstanding: string; last_order_at: string | null };
+  orders: { id: string; order_number: string; status: string; grand_total: string; payment_status: string; created_at: string }[];
 };
 
 export type CustomerListItem = {
