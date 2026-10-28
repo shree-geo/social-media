@@ -35,8 +35,13 @@ async function csrfToken(): Promise<string> {
   return body.csrf_token;
 }
 
-async function send(method: string, path: string, body: unknown): Promise<Response> {
-  const headers: Record<string, string> = { Accept: "application/json" };
+async function send(
+  method: string,
+  path: string,
+  body: unknown,
+  extraHeaders: Record<string, string> = {},
+): Promise<Response> {
+  const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
   if (method !== "GET") {
     headers["X-CSRF-Token"] = await csrfToken();
     headers["Content-Type"] = "application/json";
@@ -68,12 +73,13 @@ export async function api<T>(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   body?: unknown,
+  headers: Record<string, string> = {},
 ): Promise<T> {
-  let response = await send(method, path, body);
+  let response = await send(method, path, body, headers);
   const isAuthCall = path.includes("/auth/login") || path.includes("/auth/refresh");
   if (response.status === 401 && !isAuthCall) {
     const refreshed = await send("POST", REFRESH_PATH[realm], undefined);
-    if (refreshed.ok) response = await send(method, path, body);
+    if (refreshed.ok) response = await send(method, path, body, headers);
   }
   return parse<T>(response);
 }

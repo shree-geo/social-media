@@ -6,30 +6,35 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { PasswordInput } from "@/components/password-input";
+import { Alert, Button, Field } from "@/components/ui";
 import { ApiError, api, type Realm, type SessionResponse } from "@/lib/api";
-import { Button, Card, ErrorBanner, Field } from "@/components/ui";
 
-const PATHS: Record<Realm, { login: string; changePassword: string; home: string; changePage: string }> = {
+const PATHS: Record<Realm, { login: string; changePassword: string; home: string; changePage: string; loginPage: string }> = {
   tenant: {
     login: "/api/v1/auth/login",
     changePassword: "/api/v1/auth/change-password",
     home: "/dashboard",
     changePage: "/change-password",
+    loginPage: "/login",
   },
   platform: {
     login: "/api/v1/platform/auth/login",
     changePassword: "/api/v1/platform/auth/change-password",
     home: "/admin/tenants",
     changePage: "/admin/change-password",
+    loginPage: "/admin/login",
   },
 };
 
+const OFFLINE = "Can't reach the server. Check your internet connection and try again.";
+
 const loginSchema = z.object({
-  email: z.email("Enter a valid email address"),
+  email: z.email("Enter the email address you log in with"),
   password: z.string().min(1, "Enter your password"),
 });
 
-export function LoginForm({ realm, title }: { realm: Realm; title: string }) {
+export function LoginForm({ realm, title, intro }: { realm: Realm; title: string; intro: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<z.infer<typeof loginSchema>>({ resolver: zodResolver(loginSchema) });
@@ -40,14 +45,16 @@ export function LoginForm({ realm, title }: { realm: Realm; title: string }) {
       const session = await api<SessionResponse>(realm, "POST", PATHS[realm].login, values);
       router.replace(session.must_change_password ? PATHS[realm].changePage : PATHS[realm].home);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not reach the server. Check your connection.");
+      setError(err instanceof ApiError ? err.message : OFFLINE);
     }
   });
 
   return (
-    <Card title={title}>
+    <>
+      <h1 className="text-2xl font-semibold text-ink">{title}</h1>
+      <p className="mt-1 mb-8 text-ink-muted">{intro}</p>
       <form onSubmit={onSubmit} noValidate>
-        <ErrorBanner message={error} />
+        {error && <Alert tone="error">{error}</Alert>}
         <Field
           label="Email"
           type="email"
@@ -56,34 +63,34 @@ export function LoginForm({ realm, title }: { realm: Realm; title: string }) {
           error={form.formState.errors.email?.message}
           {...form.register("email")}
         />
-        <Field
+        <PasswordInput
           label="Password"
-          type="password"
           autoComplete="current-password"
-          hint="First time? Use the temporary password we sent you."
+          hint={realm === "tenant" ? "First time here? Use the temporary password we sent you." : undefined}
           error={form.formState.errors.password?.message}
           {...form.register("password")}
         />
-        <Button type="submit" disabled={form.formState.isSubmitting} className="w-full">
-          {form.formState.isSubmitting ? "Logging in…" : "Log in"}
+        <Button type="submit" loading={form.formState.isSubmitting} className="mt-2 w-full">
+          Log in
         </Button>
       </form>
-    </Card>
+    </>
   );
 }
 
 const changeSchema = z
   .object({
-    current_password: z.string().min(1, "Enter your current or temporary password"),
+    current_password: z.string().min(1, "Enter your current password"),
     new_password: z.string().min(10, "Use at least 10 characters"),
     confirm: z.string(),
   })
-  .refine((v) => v.new_password === v.confirm, { path: ["confirm"], message: "Passwords do not match" });
+  .refine((v) => v.new_password === v.confirm, { path: ["confirm"], message: "The two passwords don't match" });
 
 export function ChangePasswordForm({ realm, firstLogin }: { realm: Realm; firstLogin: boolean }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const form = useForm<z.infer<typeof changeSchema>>({ resolver: zodResolver(changeSchema) });
+  const { errors } = form.formState;
 
   const onSubmit = form.handleSubmit(async ({ current_password, new_password }) => {
     setError(null);
@@ -92,43 +99,46 @@ export function ChangePasswordForm({ realm, firstLogin }: { realm: Realm; firstL
       router.replace(PATHS[realm].home);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401 && err.code === "unauthorized") {
-        router.replace(realm === "tenant" ? "/login" : "/admin/login");
+        router.replace(PATHS[realm].loginPage);
         return;
       }
-      setError(err instanceof ApiError ? err.message : "Could not reach the server. Check your connection.");
+      setError(err instanceof ApiError ? err.message : OFFLINE);
     }
   });
 
   return (
-    <Card title={firstLogin ? "Welcome! Please set your own password" : "Change password"}>
+    <>
+      <h1 className="text-2xl font-semibold text-ink">{firstLogin ? "Set your own password" : "Change password"}</h1>
+      <p className="mt-1 mb-8 text-ink-muted">
+        {firstLogin
+          ? "Your temporary password works only once. Choose a password only you know."
+          : "Choose a new password. You'll stay logged in on this device."}
+      </p>
       <form onSubmit={onSubmit} noValidate>
-        <ErrorBanner message={error} />
-        <Field
+        {error && <Alert tone="error">{error}</Alert>}
+        <PasswordInput
           label={firstLogin ? "Temporary password" : "Current password"}
-          type="password"
           autoComplete="current-password"
-          error={form.formState.errors.current_password?.message}
+          error={errors.current_password?.message}
           {...form.register("current_password")}
         />
-        <Field
+        <PasswordInput
           label="New password"
-          type="password"
           autoComplete="new-password"
-          hint="At least 10 characters. A short sentence is easy to remember."
-          error={form.formState.errors.new_password?.message}
+          hint="At least 10 characters. A short sentence is easy to remember and hard to guess."
+          error={errors.new_password?.message}
           {...form.register("new_password")}
         />
-        <Field
-          label="Confirm new password"
-          type="password"
+        <PasswordInput
+          label="Type the new password again"
           autoComplete="new-password"
-          error={form.formState.errors.confirm?.message}
+          error={errors.confirm?.message}
           {...form.register("confirm")}
         />
-        <Button type="submit" disabled={form.formState.isSubmitting} className="w-full">
-          {form.formState.isSubmitting ? "Saving…" : "Set password"}
+        <Button type="submit" loading={form.formState.isSubmitting} className="mt-2 w-full">
+          Save password
         </Button>
       </form>
-    </Card>
+    </>
   );
 }

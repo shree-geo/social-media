@@ -47,6 +47,39 @@ All host ports bind to `127.0.0.1` and can be changed in `.env` if they clash wi
 | storage | http://localhost:8343 (`DEV_S3_PORT`) | S3-compatible API (SeaweedFS); keys = `S3_ACCESS_KEY`/`S3_SECRET_KEY` |
 | mailpit | http://localhost:8035 (`DEV_MAILPIT_PORT`) | captured outgoing email |
 
+## Changing the look (theme, fonts, brand)
+
+All colors, fonts, type sizes and corner radii live in **one file**: `frontend/src/styles/theme.css`.
+
+| To change | Edit |
+|---|---|
+| Brand / accent / status colors | `--sc-*` values in section 1 (light) and section 2 (dark) |
+| Sidebar colors (business app / admin console) | `--sc-nav-*` and `--sc-admin-nav-bg` in sections 1 and 2 |
+| Font family | `--sc-font-sans` in section 3, and the `@fontsource/...` imports in `frontend/src/app/layout.tsx` |
+| Type sizes, line height | `--sc-text-*`, `--sc-leading-*` in section 3 |
+| Corner roundness | `--sc-radius-*` in section 3 |
+| Product name, login-screen wording | `frontend/src/config/brand.ts` |
+
+Components only use the semantic classes generated from these tokens (`bg-primary`, `text-ink-muted`, `border-line`, `bg-attention` …), never raw hex values or Tailwind's default palette, so editing the tokens restyles the whole app. Dark mode follows the device setting automatically.
+
+## Demo inbox data (development only)
+
+Until WhatsApp/Messenger are connected (Phases 3-4), you can fill a tenant's inbox with sample conversations. They go through the real ingestion pipeline (routing, identity resolution, dedup):
+
+```bash
+docker compose exec backend python -m app.cli demo-inbox <owner-email>
+```
+
+Replies on the demo channel end as "Not sent" (`channel_unavailable`) because it has no real provider connection. The command refuses to run unless `APP_ENV=development`.
+
+## Celery code changes
+
+The API reloads on file changes; **Celery worker and beat do not**. After adding or changing tasks:
+
+```bash
+docker compose restart worker beat
+```
+
 ## Backend without Docker
 
 ```bash

@@ -1,96 +1,151 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { Check, MessagesSquare } from "lucide-react";
+import Link from "next/link";
 
-import { Button, Card } from "@/components/ui";
-import { ApiError, api, type Me } from "@/lib/api";
+import { useMe } from "@/components/tenant-shell";
+import { Alert, PageHeader, SubscriptionPill, cx } from "@/components/ui";
+import { api, type Me } from "@/lib/api";
+import type { ConversationPage } from "@/lib/inbox";
 
-function SubscriptionBanner({ subscription }: { subscription: Me["subscription"] }) {
+function SubscriptionNotice({ subscription }: { subscription: Me["subscription"] }) {
   const { status, days_remaining, expiry_date } = subscription;
+  const date = expiry_date ? new Date(expiry_date).toLocaleDateString(undefined, { dateStyle: "medium" }) : "";
   if (status === "GRACE") {
     return (
-      <div role="status" className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
-        Your subscription expired on {expiry_date}. Renew soon to keep making changes.
-      </div>
+      <Alert tone="warning" title="Your subscription has ended">
+        It ended on {date}. Everything still works for a few more days — renew now to avoid interruption.
+      </Alert>
     );
   }
   if (status === "EXPIRED") {
     return (
-      <div role="status" className="mb-4 rounded-lg border border-red-600/40 bg-red-600/10 px-4 py-3 text-sm">
-        Your subscription has expired. You can view your data, but changes are paused until it is renewed.
-      </div>
+      <Alert tone="error" title="Your subscription has expired">
+        You can still see your customers and messages, but you can&apos;t reply or make changes until it&apos;s renewed.
+      </Alert>
     );
   }
   if (days_remaining !== null && days_remaining <= 15) {
     return (
-      <div role="status" className="mb-4 rounded-lg border border-blue-600/30 bg-blue-600/10 px-4 py-3 text-sm">
-        Your subscription renews on {expiry_date} ({days_remaining} days left).
-      </div>
+      <Alert tone="info" title={`Renews in ${days_remaining} days`}>
+        Your subscription runs until {date}. Contact us to renew.
+      </Alert>
     );
   }
   return null;
 }
 
-// Setup checklist from ONBOARDING_AND_CHANNEL_SETUP.md §5. Items light up as each module ships.
-const CHECKLIST = [
-  { key: "password", label: "Set your password" },
-  { key: "business", label: "Confirm business details" },
-  { key: "facebook", label: "Connect your Facebook Page", note: "~5 min" },
-  { key: "whatsapp", label: "Connect WhatsApp", note: "~10 min" },
-  { key: "test", label: "Send a test message" },
-  { key: "products", label: "Add your products" },
-  { key: "staff", label: "Add your staff" },
+// The setup order from ONBOARDING_AND_CHANNEL_SETUP.md §5. Steps light up as each module ships.
+const STEPS = [
+  { key: "password", title: "Set your password", body: "Done when you first logged in." },
+  { key: "business", title: "Check your business details", body: "Name, PAN/VAT and address used on invoices." },
+  { key: "facebook", title: "Connect your Facebook Page", body: "About 5 minutes. Page messages arrive in your inbox." },
+  { key: "whatsapp", title: "Connect WhatsApp", body: "About 10 minutes. Use a new number or keep your WhatsApp Business app." },
+  { key: "test", title: "Send yourself a test message", body: "Message your Page or number and watch it arrive here." },
+  { key: "products", title: "Add your products", body: "So orders can be created straight from a chat." },
+  { key: "staff", title: "Add your staff", body: "Give each person their own login and role." },
 ] as const;
 
-export function Dashboard() {
-  const router = useRouter();
-  const me = useQuery({ queryKey: ["me"], queryFn: () => api<Me>("tenant", "GET", "/api/v1/auth/me") });
+function SetupSteps({ done }: { done: Set<string> }) {
+  const next = STEPS.find((s) => !done.has(s.key))?.key;
+  const progress = Math.round((done.size / STEPS.length) * 100);
+  return (
+    <section className="rounded-panel border border-line bg-surface">
+      <header className="border-b border-line px-5 py-4">
+        <h2 className="text-lg font-semibold text-ink">Set up your business</h2>
+        <div className="mt-3 flex items-center gap-3">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-sunken" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Setup progress">
+            <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
+          </div>
+          <span className="tabular text-sm text-ink-muted">
+            {done.size} of {STEPS.length}
+          </span>
+        </div>
+      </header>
+      <ol>
+        {STEPS.map((step, index) => {
+          const complete = done.has(step.key);
+          const isNext = step.key === next;
+          return (
+            <li key={step.key} className={cx("flex gap-4 border-b border-line px-5 py-4 last:border-b-0", isNext && "bg-primary-soft/60")}>
+              <span
+                className={cx(
+                  "tabular grid size-8 shrink-0 place-items-center rounded-full text-sm font-semibold",
+                  complete ? "bg-success text-white" : isNext ? "bg-primary text-on-primary" : "border border-line-strong text-ink-subtle",
+                )}
+                aria-hidden
+              >
+                {complete ? <Check className="size-4" /> : index + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className={cx("font-medium", complete ? "text-ink-muted line-through decoration-ink-subtle" : "text-ink")}>
+                  {step.title}
+                  <span className="sr-only">{complete ? " (done)" : isNext ? " (next step)" : ""}</span>
+                </p>
+                <p className="text-sm text-ink-muted">{step.body}</p>
+                {isNext && !complete && <p className="mt-1 text-xs font-medium text-primary">Available soon</p>}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
 
-  useEffect(() => {
-    if (me.error instanceof ApiError && me.error.status === 401) router.replace("/login");
-    if (me.data?.must_change_password) router.replace("/change-password");
-  }, [me.error, me.data, router]);
-
-  if (me.isPending) return <p className="text-muted">Loading…</p>;
-  if (me.error || !me.data) return <p className="text-muted">Could not load your account.</p>;
-
-  const done = new Set<string>(["password"]);
-  async function logout() {
-    await api("tenant", "POST", "/api/v1/auth/logout").catch(() => undefined);
-    router.replace("/login");
+function WaitingSummary() {
+  const waiting = useQuery({
+    queryKey: ["conversations", "unread-count"],
+    queryFn: () => api<ConversationPage>("tenant", "GET", "/api/v1/conversations?view=unread&limit=100"),
+  });
+  if (waiting.isPending) {
+    return <div className="h-[82px] animate-pulse rounded-panel border border-line bg-surface" aria-hidden />;
   }
+  const count = waiting.data?.items.length ?? 0;
+  return (
+    <Link
+      href="/inbox"
+      className={cx(
+        "flex items-center gap-4 rounded-panel border px-5 py-4 transition-colors",
+        count ? "border-attention/50 bg-attention-soft hover:border-attention" : "border-line bg-surface hover:border-line-strong",
+      )}
+    >
+      <span className={cx("grid size-11 place-items-center rounded-full", count ? "bg-attention text-on-attention" : "bg-primary-soft text-primary")}>
+        <MessagesSquare className="size-5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-lg font-semibold text-ink">
+          {count === 0 ? "No one is waiting" : count === 1 ? "1 customer is waiting for a reply" : `${count} customers are waiting for a reply`}
+        </span>
+        <span className="block text-sm text-ink-muted">{count ? "Open the inbox to reply" : "New messages will show up in your inbox"}</span>
+      </span>
+    </Link>
+  );
+}
+
+export function Dashboard() {
+  const me = useMe(); // session checks and redirects live in TenantShell
+  if (!me.data) return null;
+  const canReadInbox = me.data.permissions.includes("conversation.read");
+  const firstName = me.data.full_name.split(" ")[0];
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
-      <header className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm text-muted">{me.data.business_name}</p>
-          <h1 className="text-2xl font-semibold">Hello, {me.data.full_name}</h1>
-        </div>
-        <Button variant="secondary" onClick={logout}>
-          Log out
-        </Button>
-      </header>
-
-      <SubscriptionBanner subscription={me.data.subscription} />
-
-      <Card title={`Get started · ${done.size} of ${CHECKLIST.length} done`}>
-        <ul className="divide-y divide-black/10 dark:divide-white/10">
-          {CHECKLIST.map((item) => (
-            <li key={item.key} className="flex items-center justify-between gap-3 py-3">
-              <span className="flex items-center gap-3">
-                <span aria-hidden className={done.has(item.key) ? "text-green-600" : "text-muted"}>
-                  {done.has(item.key) ? "✓" : "○"}
-                </span>
-                <span className={done.has(item.key) ? "line-through text-muted" : ""}>{item.label}</span>
-              </span>
-              {!done.has(item.key) && <span className="text-sm text-muted">{"note" in item ? item.note : "Soon"}</span>}
-            </li>
-          ))}
-        </ul>
-      </Card>
+    <div className="mx-auto w-full max-w-3xl">
+      <PageHeader
+        title={`Namaste, ${firstName}`}
+        description={
+          <span className="inline-flex flex-wrap items-center gap-2">
+            {me.data.business_name}
+            <SubscriptionPill status={me.data.subscription.status} />
+          </span>
+        }
+      />
+      <SubscriptionNotice subscription={me.data.subscription} />
+      <div className="grid gap-6">
+        {canReadInbox && <WaitingSummary />}
+        {me.data.roles.some((r) => r === "OWNER" || r === "ADMIN") && <SetupSteps done={new Set(["password"])} />}
+      </div>
     </div>
   );
 }

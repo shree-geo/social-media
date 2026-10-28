@@ -1,12 +1,12 @@
+import { AuthScreen } from "@/components/auth-screen";
 import { LoginForm } from "@/components/password-forms";
-import { CenteredPage } from "@/components/ui";
 
-export const metadata = { title: "Log in · SocialCommerce" };
+export const metadata = { title: "Log in" };
 
 export default function LoginPage() {
   return (
-    <CenteredPage>
-      <LoginForm realm="tenant" title="Log in to your business" />
-    </CenteredPage>
+    <AuthScreen>
+      <LoginForm realm="tenant" title="Log in" intro="Reply to customers and manage orders from one place." />
+    </AuthScreen>
   );
 }

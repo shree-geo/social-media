@@ -1,10 +1,10 @@
 import { Dashboard } from "./dashboard";
 
-export const metadata = { title: "Dashboard · SocialCommerce" };
+export const metadata = { title: "Home" };
 
 export default function DashboardPage() {
   return (
-    <main className="flex flex-1 px-4 py-8">
+    <main className="px-4 py-6 sm:px-8 sm:py-8">
       <Dashboard />
     </main>
   );

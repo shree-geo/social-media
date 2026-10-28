@@ -1,0 +1,174 @@
+/*
+ * Theme configuration — the ONE place to change colors, typography and shape.
+ *
+ * Edit the values in section 1 (light) and section 2 (dark). Components never use
+ * raw hex values or Tailwind's default palette; they use the semantic utilities
+ * generated in section 4 (bg-surface, text-ink-muted, bg-primary, border-line …).
+ *
+ * Palette story: Dhaka indigo for the brand and primary actions, marigold
+ * (sayapatri) for "a customer is waiting for you", cool paper for the canvas.
+ * Channel colors are functional: they only ever mean "WhatsApp" / "Messenger".
+ */
+
+/* 1. Light theme ------------------------------------------------------------------ */
+:root {
+  /* Canvas and surfaces */
+  --sc-paper: #f5f6fa; /* app background */
+  --sc-surface: #ffffff; /* panels, list rows, inputs */
+  --sc-sunken: #eceef5; /* wells: inbound chat bubbles, table headers, skeletons */
+
+  /* Text */
+  --sc-ink: #1a2142;
+  --sc-ink-muted: #545d80;
+  --sc-ink-subtle: #8a91ac;
+  --sc-line: #dde1ec;
+  --sc-line-strong: #c4cadb;
+
+  /* Brand: Dhaka indigo */
+  --sc-primary: #24306e;
+  --sc-primary-hover: #1a2459;
+  --sc-primary-soft: #e7eaf7;
+  --sc-on-primary: #ffffff;
+
+  /* Attention: marigold (unread, waiting for reply, renewals due) */
+  --sc-attention: #e9a23b;
+  --sc-attention-soft: #fdf1dc;
+  --sc-attention-ink: #7a4a00;
+  --sc-on-attention: #2b1a00; /* text on a marigold badge */
+
+  /* Status */
+  --sc-success: #1d7f52;
+  --sc-success-soft: #e2f4ea;
+  --sc-danger: #b93434;
+  --sc-danger-soft: #fbe7e7;
+
+  /* Channels */
+  --sc-whatsapp: #1a9e55;
+  --sc-messenger: #0866ff;
+
+  /* Focus ring */
+  --sc-focus: #4f63d8;
+
+  /* Sidebar (business app): brand indigo with light text */
+  --sc-nav-bg: #24306e;
+  --sc-nav-ink: #ffffff;
+  --sc-nav-ink-muted: #c3c9ea;
+  --sc-nav-hover: rgb(255 255 255 / 0.08);
+  --sc-nav-active: rgb(255 255 255 / 0.14);
+  --sc-nav-line: rgb(255 255 255 / 0.14);
+  --sc-nav-marker: #e9a23b; /* marigold bar on the current page */
+
+  /* Sidebar (platform admin): darker ink-navy so it is never mistaken for a business's app */
+  --sc-admin-nav-bg: #141936;
+}
+
+/* 2. Dark theme (follows the device setting) ------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --sc-paper: #10142a;
+    --sc-surface: #171c37;
+    --sc-sunken: #212748;
+    --sc-ink: #e9ebf6;
+    --sc-ink-muted: #a7adc9;
+    --sc-ink-subtle: #737a9a;
+    --sc-line: #2a3058;
+    --sc-line-strong: #3b4373;
+    --sc-primary: #8d9cf0;
+    --sc-primary-hover: #a7b3f5;
+    --sc-primary-soft: #232b55;
+    --sc-on-primary: #0f1533;
+    --sc-attention: #f2b457;
+    --sc-attention-soft: #3a2c12;
+    --sc-attention-ink: #f6c97f;
+    --sc-on-attention: #2b1a00;
+    --sc-success: #4cc48a;
+    --sc-success-soft: #14321f;
+    --sc-danger: #f07878;
+    --sc-danger-soft: #3a1717;
+    --sc-whatsapp: #3ccf7a;
+    --sc-messenger: #5b9bff;
+    --sc-focus: #a7b3f5;
+    --sc-nav-bg: #1c2454;
+    --sc-nav-ink: #f2f4ff;
+    --sc-nav-ink-muted: #a9b0d6;
+    --sc-nav-hover: rgb(255 255 255 / 0.06);
+    --sc-nav-active: rgb(255 255 255 / 0.12);
+    --sc-nav-line: rgb(255 255 255 / 0.1);
+    --sc-nav-marker: #f2b457;
+    --sc-admin-nav-bg: #0b0e22;
+  }
+}
+
+/* 3. Typography and shape -------------------------------------------------------- */
+:root {
+  /* Mukta covers Devanagari and Latin in one family, so Nepali and English share
+     one rhythm. Self-hosted via @fontsource (no runtime calls to Google). */
+  --sc-font-sans: "Mukta", ui-sans-serif, system-ui, "Noto Sans Devanagari", "Segoe UI", sans-serif;
+
+  /* Type scale: minor third (1.2) from a 16px base. */
+  --sc-text-xs: 0.8125rem; /* 13px  timestamps, helper text */
+  --sc-text-sm: 0.875rem; /* 14px  secondary text, table cells */
+  --sc-text-base: 1rem; /* 16px  body, inputs (16px avoids iOS zoom) */
+  --sc-text-lg: 1.2rem; /* 19px  section titles */
+  --sc-text-xl: 1.44rem; /* 23px  page titles on phones */
+  --sc-text-2xl: 1.728rem; /* 28px  page titles */
+  --sc-text-3xl: 2.488rem; /* 40px  brand panel statement */
+
+  /* Devanagari needs more vertical room than Latin. */
+  --sc-leading-body: 1.6;
+  --sc-leading-tight: 1.2;
+
+  /* Shape: small for controls, larger for containers, round for chat. */
+  --sc-radius-control: 8px;
+  --sc-radius-panel: 14px;
+  --sc-radius-bubble: 18px;
+}
+
+/* 4. Tailwind mapping — generates bg-*, text-*, border-*, font-*, rounded-* utilities. */
+@theme inline {
+  --color-paper: var(--sc-paper);
+  --color-surface: var(--sc-surface);
+  --color-sunken: var(--sc-sunken);
+  --color-ink: var(--sc-ink);
+  --color-ink-muted: var(--sc-ink-muted);
+  --color-ink-subtle: var(--sc-ink-subtle);
+  --color-line: var(--sc-line);
+  --color-line-strong: var(--sc-line-strong);
+  --color-primary: var(--sc-primary);
+  --color-primary-hover: var(--sc-primary-hover);
+  --color-primary-soft: var(--sc-primary-soft);
+  --color-on-primary: var(--sc-on-primary);
+  --color-attention: var(--sc-attention);
+  --color-attention-soft: var(--sc-attention-soft);
+  --color-attention-ink: var(--sc-attention-ink);
+  --color-on-attention: var(--sc-on-attention);
+  --color-success: var(--sc-success);
+  --color-success-soft: var(--sc-success-soft);
+  --color-danger: var(--sc-danger);
+  --color-danger-soft: var(--sc-danger-soft);
+  --color-whatsapp: var(--sc-whatsapp);
+  --color-messenger: var(--sc-messenger);
+  --color-focus: var(--sc-focus);
+  --color-nav: var(--sc-nav-bg);
+  --color-nav-ink: var(--sc-nav-ink);
+  --color-nav-ink-muted: var(--sc-nav-ink-muted);
+  --color-nav-hover: var(--sc-nav-hover);
+  --color-nav-active: var(--sc-nav-active);
+  --color-nav-line: var(--sc-nav-line);
+  --color-nav-marker: var(--sc-nav-marker);
+  --color-admin-nav: var(--sc-admin-nav-bg);
+
+  --font-sans: var(--sc-font-sans);
+
+  --text-xs: var(--sc-text-xs);
+  --text-sm: var(--sc-text-sm);
+  --text-base: var(--sc-text-base);
+  --text-lg: var(--sc-text-lg);
+  --text-xl: var(--sc-text-xl);
+  --text-2xl: var(--sc-text-2xl);
+  --text-3xl: var(--sc-text-3xl);
+
+  --radius-control: var(--sc-radius-control);
+  --radius-panel: var(--sc-radius-panel);
+  --radius-bubble: var(--sc-radius-bubble);
+}

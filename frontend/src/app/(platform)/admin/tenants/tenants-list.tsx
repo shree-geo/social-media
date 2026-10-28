@@ -1,64 +1,134 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Building2, Plus } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
+import { EmptyState, PageHeader, SubscriptionPill, cx } from "@/components/ui";
 import { api } from "@/lib/api";
 import type { TenantListItem } from "@/lib/platform";
 
-const STATUS_STYLE: Record<string, string> = {
-  ACTIVE: "bg-green-600/15 text-green-700 dark:text-green-300",
-  TRIAL: "bg-blue-600/15 text-blue-700 dark:text-blue-300",
-  GRACE: "bg-amber-500/20 text-amber-800 dark:text-amber-300",
-  EXPIRED: "bg-red-600/15 text-red-700 dark:text-red-300",
-  SUSPENDED: "bg-red-600/15 text-red-700 dark:text-red-300",
-};
+const FILTERS = [
+  { key: "all", label: "All", test: () => true },
+  {
+    key: "renewals",
+    label: "Renewals due",
+    test: (t: TenantListItem) => t.days_remaining !== null && t.days_remaining >= 0 && t.days_remaining <= 30,
+  },
+  { key: "lapsed", label: "Grace or expired", test: (t: TenantListItem) => t.subscription_status === "GRACE" || t.subscription_status === "EXPIRED" },
+  { key: "suspended", label: "Suspended", test: (t: TenantListItem) => t.subscription_status === "SUSPENDED" },
+] as const;
+
+function daysLeft(t: TenantListItem): { text: string; urgent: boolean } {
+  if (t.days_remaining === null) return { text: "", urgent: false };
+  if (t.days_remaining < 0) return { text: `${-t.days_remaining} days ago`, urgent: true };
+  if (t.days_remaining === 0) return { text: "Today", urgent: true };
+  return { text: `${t.days_remaining} days`, urgent: t.days_remaining <= 15 };
+}
 
 export function TenantsList() {
+  const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
   const tenants = useQuery({
     queryKey: ["platform-tenants"],
-    queryFn: () => api<TenantListItem[]>("platform", "GET", "/api/v1/platform/tenants"),
+    queryFn: () => api<TenantListItem[]>("platform", "GET", "/api/v1/platform/tenants?limit=100"),
   });
-
-  if (tenants.isPending) return <p className="text-muted">Loading…</p>;
-  if (tenants.error) return <p className="text-red-600">Could not load tenants.</p>;
+  const all = tenants.data ?? [];
+  const active = FILTERS.find((f) => f.key === filter)!;
+  const rows = all.filter(active.test);
 
   return (
-    <div className="mx-auto max-w-5xl">
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Tenants</h1>
-        <Link href="/admin/tenants/new" className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">
-          New tenant
-        </Link>
+    <div className="mx-auto max-w-6xl">
+      <PageHeader
+        title="Businesses"
+        description="Every SME using the platform, with their package and when it renews."
+        actions={
+          <Link
+            href="/admin/tenants/new"
+            className="inline-flex min-h-11 items-center gap-2 rounded-control bg-primary px-4 font-medium text-on-primary hover:bg-primary-hover"
+          >
+            <Plus className="size-4" aria-hidden />
+            Add a business
+          </Link>
+        }
+      />
+
+      <div className="mb-4 flex flex-wrap gap-2" role="tablist" aria-label="Filter">
+        {FILTERS.map((f) => {
+          const count = all.filter(f.test).length;
+          return (
+            <button
+              key={f.key}
+              role="tab"
+              aria-selected={filter === f.key}
+              onClick={() => setFilter(f.key)}
+              className={cx(
+                "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm transition-colors",
+                filter === f.key ? "border-primary bg-primary-soft font-medium text-primary" : "border-line bg-surface text-ink-muted hover:border-line-strong",
+              )}
+            >
+              {f.label}
+              <span className="tabular text-xs">{count}</span>
+            </button>
+          );
+        })}
       </div>
-      {tenants.data.length === 0 ? (
-        <p className="text-muted">No tenants yet.</p>
+
+      {tenants.isPending ? null : all.length === 0 ? (
+        <div className="rounded-panel border border-line bg-surface">
+          <EmptyState
+            icon={Building2}
+            title="No businesses yet"
+            action={
+              <Link href="/admin/tenants/new" className="font-medium text-primary hover:underline">
+                Add the first business
+              </Link>
+            }
+          >
+            When an SME signs up, add them here and send them their login details.
+          </EmptyState>
+        </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-black/10 dark:border-white/15">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead className="bg-black/5 dark:bg-white/5">
+        <div className="overflow-x-auto rounded-panel border border-line bg-surface">
+          <table className="w-full min-w-[680px] text-left">
+            <thead className="border-b border-line bg-sunken/60 text-sm text-ink-muted">
               <tr>
-                <th className="px-3 py-2 font-medium">Business</th>
-                <th className="px-3 py-2 font-medium">Package</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Expiry</th>
-                <th className="px-3 py-2 text-right font-medium">Days left</th>
+                <th scope="col" className="px-4 py-3 font-medium">Business</th>
+                <th scope="col" className="px-4 py-3 font-medium">Package</th>
+                <th scope="col" className="px-4 py-3 font-medium">Status</th>
+                <th scope="col" className="px-4 py-3 font-medium">Renews</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Time left</th>
               </tr>
             </thead>
             <tbody>
-              {tenants.data.map((t) => (
-                <tr key={t.tenant_id} className="border-t border-black/10 dark:border-white/10">
-                  <td className="px-3 py-2">{t.business_name}</td>
-                  <td className="px-3 py-2">{t.plan_code ?? "—"}</td>
-                  <td className="px-3 py-2">
-                    <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLE[t.subscription_status ?? ""] ?? ""}`}>
-                      {t.subscription_status ?? "None"}
-                    </span>
+              {rows.map((t) => {
+                const left = daysLeft(t);
+                return (
+                  <tr key={t.tenant_id} className="border-b border-line last:border-b-0">
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-ink">{t.business_name}</p>
+                      <p className="text-xs text-ink-subtle">Joined {new Date(t.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })}</p>
+                    </td>
+                    <td className="px-4 py-3 text-ink-muted">{t.plan_code?.replace(/^PLAN_/, "").replace(/_/g, " ").toLowerCase().replace(/^\w/, (m) => m.toUpperCase()) ?? "None"}</td>
+                    <td className="px-4 py-3">
+                      <SubscriptionPill status={t.subscription_status} />
+                    </td>
+                    <td className="tabular px-4 py-3 text-ink-muted">
+                      {t.expiry_date ? new Date(t.expiry_date).toLocaleDateString(undefined, { dateStyle: "medium" }) : "None"}
+                    </td>
+                    <td className={cx("tabular px-4 py-3 text-right", left.urgent ? "font-semibold text-attention-ink" : "text-ink-muted")}>
+                      {left.text}
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-ink-muted">
+                    No businesses in this list.
                   </td>
-                  <td className="px-3 py-2">{t.expiry_date ?? "—"}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{t.days_remaining ?? "—"}</td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>
