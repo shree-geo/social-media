@@ -155,7 +155,7 @@ class TenantContext:
         return self.user.id
 
 
-async def _load_tenant_context(
+async def load_tenant_context(
     session: AsyncSession, claims: AccessClaims, info: RequestInfo, *, allow_password_change: bool
 ) -> TenantContext:
     if claims.tenant_id is None:
@@ -213,7 +213,7 @@ async def _load_tenant_context(
 async def _tenant_context(request: Request, allow_password_change: bool) -> AsyncIterator[TenantContext]:
     claims = tenant_claims(request)
     async with runtime_sessionmaker()() as session, session.begin():
-        ctx = await _load_tenant_context(
+        ctx = await load_tenant_context(
             session, claims, request_info(request), allow_password_change=allow_password_change
         )
         if ctx.subscription.access is Access.BLOCKED and not allow_password_change:

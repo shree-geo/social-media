@@ -5,17 +5,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import health
-from app.api.v1.router import api_router
+from app.api.v1.router import api_router, webhook_router
 from app.core.config import get_settings
 from app.core.database import dispose_engines
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
 from app.middleware.request_context import RequestContextMiddleware
+from app.services import realtime
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
+    await realtime.close()
     await dispose_engines()
 
 
@@ -47,6 +49,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(api_router, prefix="/api/v1")
+    app.include_router(webhook_router, prefix="/api/v1")
     return app
 
 

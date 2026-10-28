@@ -39,6 +39,7 @@ celery_app.conf.update(
     broker_connection_retry_on_startup=True,
     beat_schedule={
         # Times are Asia/Kathmandu (``timezone`` above). Sweepers and token checks are added with their modules.
+        "system-sweep": {"task": "system.sweep", "schedule": 60.0},
         "subscriptions-recompute-statuses": {
             "task": "subscriptions.recompute_statuses",
             "schedule": crontab(hour=0, minute=15),

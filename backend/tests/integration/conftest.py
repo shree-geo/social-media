@@ -9,9 +9,11 @@ import asyncio
 import os
 import subprocess
 import sys
+import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
 import pytest
@@ -20,6 +22,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from sqlalchemy.pool import NullPool
+
+if TYPE_CHECKING:
+    from tests.fakes import FakeAdapter
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 GRANTS_SQL = BACKEND_DIR.parent / "infra" / "postgres" / "init" / "02-database-grants.sql"
@@ -117,6 +122,8 @@ def api_env(database_urls: DatabaseUrls) -> Iterator[None]:
         COOKIE_SECURE="false",
         DATABASE_URL=database_urls.runtime.render_as_string(hide_password=False),
         DATABASE_PLATFORM_URL=database_urls.platform.render_as_string(hide_password=False),
+        # This project's dev Redis (docker-compose.dev.yml), not whatever runs on 6379.
+        REDIS_URL=os.environ.get("INTEGRATION_REDIS_URL", "redis://localhost:6381/15"),
     )
     get_settings.cache_clear()
     database._runtime_engine = database._platform_engine = None
@@ -151,3 +158,107 @@ async def make_client(api_env: None) -> AsyncIterator[Callable[[], Awaitable[htt
     for client in clients:
         await client.aclose()
     await dispose_engines()
+
+
+# --- inbox fixtures -----------------------------------------------------------------
+
+
+@dataclass
+class Jobs:
+    """Captures enqueued background jobs so tests run them explicitly and deterministically."""
+
+    queued: list[tuple[str, dict[str, object], float | None]]
+
+    async def run_all(self) -> list[str]:
+        from app.services import ingestion, messaging
+
+        results: list[str] = []
+        while self.queued:
+            name, kwargs, _ = self.queued.pop(0)
+            if name == "webhooks.process_event":
+                results.append(await ingestion.process(uuid.UUID(str(kwargs["event_id"]))))
+            elif name == "messages.send":
+                results.append(
+                    await messaging.send(uuid.UUID(str(kwargs["tenant_id"])), uuid.UUID(str(kwargs["message_id"])))
+                )
+        return results
+
+
+@pytest.fixture
+def jobs(monkeypatch: pytest.MonkeyPatch) -> Jobs:
+    from app.workers import queue
+
+    captured = Jobs(queued=[])
+
+    async def capture(name: str, kwargs: dict[str, object], countdown: float | None) -> None:
+        captured.queued.append((name, kwargs, countdown))
+
+    monkeypatch.setattr(queue, "dispatcher", capture)
+    return captured
+
+
+@pytest.fixture
+def fake_adapter(monkeypatch: pytest.MonkeyPatch) -> Iterator["FakeAdapter"]:
+    from app.integrations import registry
+    from app.services import realtime
+    from tests.fakes import FakeAdapter
+
+    async def no_publish(*_: object, **__: object) -> None:
+        return None
+
+    # Real-time fan-out is covered separately; keep inbox tests independent of Redis.
+    monkeypatch.setattr(realtime, "publish", no_publish)
+    adapter = FakeAdapter()
+    registry.register(adapter)
+    yield adapter
+    registry.unregister(adapter.provider)
+
+
+@dataclass(frozen=True)
+class ConnectedChannel:
+    tenant_id: uuid.UUID
+    account_id: uuid.UUID
+    external_id: str
+
+
+async def connect_channel(
+    platform_db: AsyncEngine, tenant_id: uuid.UUID, token: str = "test-access-token"
+) -> ConnectedChannel:
+    """Insert a connected WhatsApp-like account with an encrypted token (what Phase 3's wizard will do)."""
+    from app.core.crypto import encrypt
+    from app.core.ids import new_id
+    from app.services.messaging import credential_aad
+
+    connection_id, account_id, credential_id = new_id(), new_id(), new_id()
+    external_id = f"pn-{account_id.hex[-12:]}"
+    blob = encrypt(token.encode(), credential_aad(tenant_id, credential_id))
+    async with platform_db.begin() as conn:
+        await conn.execute(
+            text(
+                "INSERT INTO channel_connections (id, tenant_id, provider, status) "
+                "VALUES (:id, :t, 'whatsapp', 'connected')"
+            ),
+            {"id": connection_id, "t": tenant_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO channel_accounts (id, tenant_id, connection_id, provider, external_account_id, display_name) "
+                "VALUES (:id, :t, :c, 'whatsapp', :e, 'Sharma Furniture')"
+            ),
+            {"id": account_id, "t": tenant_id, "c": connection_id, "e": external_id},
+        )
+        await conn.execute(
+            text(
+                "INSERT INTO channel_credentials (id, tenant_id, connection_id, credential_type, ciphertext, nonce, key_version) "
+                "VALUES (:id, :t, :c, 'system_user_token', :ct, :n, :v)"
+            ),
+            {
+                "id": credential_id,
+                "t": tenant_id,
+                "c": connection_id,
+                "ct": blob.ciphertext,
+                "n": blob.nonce,
+                "v": blob.key_version,
+            },
+        )
+    return ConnectedChannel(tenant_id, account_id, external_id)

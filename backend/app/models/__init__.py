@@ -1,6 +1,18 @@
 """All models are imported here so Alembic sees the full metadata."""
 
 from app.models.base import Base
+from app.models.channels import ChannelAccount, ChannelConnection, ChannelCredential, WebhookEvent, WebhookEventAttempt
+from app.models.conversations import Conversation, Message, MessageAttachment, MessageEvent
+from app.models.customers import (
+    Customer,
+    CustomerAddress,
+    CustomerDuplicateCandidate,
+    CustomerIdentity,
+    CustomerMerge,
+    CustomerNote,
+    CustomerTag,
+    CustomerTagLink,
+)
 from app.models.identity import (
     AuthToken,
     MembershipRole,
@@ -30,9 +42,24 @@ __all__ = [
     "AuditLog",
     "AuthToken",
     "Base",
+    "ChannelAccount",
+    "ChannelConnection",
+    "ChannelCredential",
+    "Conversation",
+    "Customer",
+    "CustomerAddress",
+    "CustomerDuplicateCandidate",
+    "CustomerIdentity",
+    "CustomerMerge",
+    "CustomerNote",
+    "CustomerTag",
+    "CustomerTagLink",
     "DocumentSequence",
     "IdempotencyKey",
     "MembershipRole",
+    "Message",
+    "MessageAttachment",
+    "MessageEvent",
     "Notification",
     "Permission",
     "Plan",
@@ -52,4 +79,6 @@ __all__ = [
     "TenantSettings",
     "UsageRecord",
     "User",
+    "WebhookEvent",
+    "WebhookEventAttempt",
 ]

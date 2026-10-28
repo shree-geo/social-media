@@ -607,7 +607,7 @@ erDiagram
 | `channel_credentials` | `UNIQUE (connection_id, coalesce(channel_account_id, …), credential_type) WHERE revoked_at IS NULL` |
 | `webhook_events` | `UNIQUE (provider, payload_hash)`; `UNIQUE (provider, provider_event_id) WHERE provider_event_id IS NOT NULL`; `ix (processing_status, next_retry_at) WHERE processing_status IN ('received','failed')`; `ix (received_at)` for purge |
 
-`webhook_events` / `webhook_event_attempts` are **not** tenant-scoped (tenant unknown at receipt). Only the ingestion path and `app_platform` access them; tenants see webhook health via `channel_accounts.last_webhook_at`.
+`webhook_event_attempts` is append-only for `app_runtime` (no `UPDATE`/`DELETE`). `webhook_events` / `webhook_event_attempts` are **not** tenant-scoped (tenant unknown at receipt). Only the ingestion path and `app_platform` access them; tenants see webhook health via `channel_accounts.last_webhook_at`.
 
 ---
 
@@ -640,6 +640,7 @@ erDiagram
         uuid channel_account_id FK "NULL for phone/email"
         text provider_user_id "wa_id / PSID / E.164 / email"
         text profile_name
+        text phone_e164 "normalized phone when the provider gives one"
         bool is_verified
         timestamptz first_seen_at
         timestamptz last_seen_at
