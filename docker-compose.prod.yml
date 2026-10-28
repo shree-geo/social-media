@@ -1,0 +1,42 @@
+# Single-VPS production overrides.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# With managed PostgreSQL/Redis/S3, point the URLs in .env at them and also
+# disable the local postgres/redis services the same way storage/mailpit are disabled.
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  postgres:
+    <<: *logging
+  redis:
+    <<: *logging
+  migrate:
+    <<: *logging
+  backend:
+    <<: *logging
+    environment:
+      APP_ENV: production
+      COOKIE_SECURE: "true"
+  worker:
+    <<: *logging
+    environment:
+      APP_ENV: production
+  beat:
+    <<: *logging
+    environment:
+      APP_ENV: production
+  frontend:
+    <<: *logging
+  nginx:
+    <<: *logging
+    ports: !override
+      - "80:80"
+
+  # Local-only helpers: use real object storage and an email provider in production.
+  storage:
+    profiles: ["local-only"]
+  mailpit:
+    profiles: ["local-only"]

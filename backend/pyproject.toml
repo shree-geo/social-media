@@ -1,0 +1,78 @@
+[project]
+name = "socialcommerce-backend"
+version = "0.1.0"
+description = "SocialCommerce API, workers and migrations"
+authors = [
+    { name = "shree", email = "youngmindsshree@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.20.1",
+    "argon2-cffi>=25.1.0",
+    "asyncpg>=0.32.0",
+    "celery[redis]>=5.6.3",
+    "cryptography>=50.0.2",
+    "email-validator>=2.3.0",
+    "fastapi>=0.162.0",
+    "httpx>=0.28.1",
+    "pydantic>=2.14.1",
+    "pydantic-settings>=2.16.1",
+    "pyjwt>=2.15.1",
+    "python-dateutil>=3.0.0",
+    "python-multipart>=0.0.32",
+    "redis>=6.4.0",
+    "sqlalchemy[asyncio]>=2.1.6",
+    "structlog>=26.1.0",
+    "uuid-utils>=1.2.0",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.1",
+    "ruff>=0.17.3",
+    "types-python-dateutil>=2.9.0.20261021",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = ["integration: needs PostgreSQL/Redis (run with -m integration)"]
+addopts = "-m 'not integration'"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+# Long lines are left to the formatter; it keeps strings and URLs intact.
+select = ["E", "F", "W", "I", "B", "UP", "S", "ASYNC", "SIM", "RUF"]
+ignore = ["S101", "E501"]  # assert is fine; line length is handled by ruff format
+
+[tool.ruff.lint.isort]
+known-third-party = ["alembic"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/versions/*" = ["E501"]
+"tests/**" = ["S105", "S106", "S608"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["alembic/"]
+
+[[tool.mypy.overrides]]
+module = ["celery.*", "kombu.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# Celery's task/signal decorators are untyped.
+module = ["app.workers.*"]
+disallow_untyped_decorators = false

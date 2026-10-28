@@ -1,0 +1,53 @@
+# Development overrides: hot reload, source bind mounts, exposed ports (localhost only).
+# Host ports are configurable (DEV_*_PORT in .env) to avoid clashes with other projects.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+x-backend-dev: &backend-dev
+  build:
+    context: ./backend
+    target: dev
+  image: socialcommerce-backend:dev
+  volumes:
+    - ./backend:/app
+    - /app/.venv
+  environment:
+    APP_ENV: development
+
+services:
+  postgres:
+    ports: ["127.0.0.1:${DEV_POSTGRES_PORT:-5442}:5432"]
+
+  redis:
+    ports: ["127.0.0.1:${DEV_REDIS_PORT:-6381}:6379"]
+
+  migrate:
+    <<: *backend-dev
+
+  backend:
+    <<: *backend-dev
+
+  worker:
+    <<: *backend-dev
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "-Q", "webhooks,outbound,media,default,pdf", "--concurrency=1", "--pool=solo"]
+
+  beat:
+    <<: *backend-dev
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    image: socialcommerce-frontend:dev
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+
+  storage:
+    ports: ["127.0.0.1:${DEV_S3_PORT:-8343}:8333"]
+
+  mailpit:
+    ports: ["127.0.0.1:${DEV_MAILPIT_PORT:-8035}:8025"]
