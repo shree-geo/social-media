@@ -20,6 +20,10 @@ from app.core.logging import configure_logging
 settings = get_settings()
 configure_logging(settings.log_level, json=settings.app_env != "development")
 
+from app.integrations.setup import register_enabled_adapters  # noqa: E402
+
+register_enabled_adapters()
+
 celery_app = Celery("socialcommerce", broker=str(settings.celery_broker_url), include=["app.workers.tasks"])
 
 QUEUES = ("webhooks", "outbound", "media", "default", "pdf")
@@ -40,6 +44,7 @@ celery_app.conf.update(
     beat_schedule={
         # Times are Asia/Kathmandu (``timezone`` above). Sweepers and token checks are added with their modules.
         "system-sweep": {"task": "system.sweep", "schedule": 60.0},
+        "channels-health-check": {"task": "channels.check_health", "schedule": crontab(hour=3, minute=0)},
         "subscriptions-recompute-statuses": {
             "task": "subscriptions.recompute_statuses",
             "schedule": crontab(hour=0, minute=15),

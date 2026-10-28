@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Home, LogOut, MessageCircle, MessagesSquare, Users, type LucideIcon } from "lucide-react";
+import { Home, LogOut, MessageCircle, MessagesSquare, Plug, Users, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
@@ -18,6 +18,7 @@ const NAV: Omit<NavItem, "badge">[] = [
   { href: "/dashboard", label: "Home", icon: Home, permission: null },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "conversation.read" },
   { href: "/customers", label: "Customers", icon: Users, permission: "customer.read" },
+  { href: "/channels", label: "Channels", icon: Plug, permission: "channel.manage" },
 ];
 
 export function useMe() {

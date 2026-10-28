@@ -23,11 +23,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import runtime_sessionmaker, set_tenant_context
 from app.core.logging import get_logger
 from app.integrations import registry
-from app.integrations.base import InboundMessage, MessageStatusUpdate, NormalizedEvent
+from app.integrations.base import InboundMessage, MessageStatusUpdate, NormalizedEvent, ReadReceipt
 from app.models import (
     ChannelAccount,
     Conversation,
     Customer,
+    CustomerIdentity,
     Message,
     MessageAttachment,
     MessageEvent,
@@ -35,6 +36,7 @@ from app.models import (
     WebhookEventAttempt,
 )
 from app.services import customers, realtime
+from app.workers.queue import enqueue
 
 log = get_logger(__name__)
 
@@ -243,6 +245,8 @@ async def _handle_status(
         )
     ).scalar_one_or_none()
     if message is None:
+        if not event.retry_if_unknown:
+            return None  # receipt for a message we never stored (e.g. sent before connecting)
         # Status can arrive before our send transaction stored the provider id.
         raise RetryLater(f"status for unknown message {event.provider_message_id}")
 
@@ -275,10 +279,42 @@ async def _handle_status(
     }
 
 
+async def _handle_read(
+    session: AsyncSession, tenant_id: uuid.UUID, account_id: uuid.UUID, event: ReadReceipt
+) -> dict[str, Any] | None:
+    """Mark our replies in this chat up to the watermark as read (never moves a status backwards)."""
+    conversation_id = (
+        await session.execute(
+            select(Conversation.id)
+            .join(CustomerIdentity, CustomerIdentity.id == Conversation.customer_identity_id)
+            .where(
+                Conversation.tenant_id == tenant_id,
+                Conversation.channel_account_id == account_id,
+                CustomerIdentity.provider_user_id == event.provider_user_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if conversation_id is None:
+        return None
+    result = await session.execute(
+        update(Message)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.direction == "outbound",
+            Message.status.in_(("sent", "delivered")),
+            Message.provider_timestamp <= event.watermark,
+        )
+        .values(status="read", read_at=event.watermark)
+    )
+    if not result.rowcount:  # type: ignore[attr-defined]
+        return None
+    return {"type": "message.status", "conversation_id": conversation_id, "status": "read"}
+
+
 async def _process_one(provider: str, event: NormalizedEvent) -> str:
     """Returns ``processed`` or ``ignored``. Raises :class:`RetryLater` for transient conditions."""
-    if not isinstance(event, InboundMessage | MessageStatusUpdate):
-        return "ignored"  # account events are handled with their channel module (Phase 3/4)
+    if not isinstance(event, InboundMessage | MessageStatusUpdate | ReadReceipt):
+        return "ignored"  # account-level events are handled by the channel health checks
 
     async with runtime_sessionmaker()() as session, session.begin():
         routed = await _route(session, provider, event.channel_external_id)
@@ -292,10 +328,25 @@ async def _process_one(provider: str, event: NormalizedEvent) -> str:
         )
         if isinstance(event, InboundMessage):
             published = await _handle_message(session, provider, tenant_id, account_id, event)
+        elif isinstance(event, ReadReceipt):
+            published = await _handle_read(session, tenant_id, account_id, event)
         else:
             published = await _handle_status(session, tenant_id, account_id, event)
 
     if published:
+        if (
+            isinstance(event, InboundMessage)
+            and published.get("new_customer")
+            and not event.profile_name
+            and not event.is_echo
+        ):
+            # Messenger webhooks carry no name; look it up once for new customers.
+            await enqueue(
+                "customers.fetch_profile",
+                tenant_id=str(tenant_id),
+                channel_account_id=str(account_id),
+                provider_user_id=event.provider_user_id,
+            )
         event_type = published.pop("type")
         await realtime.publish(tenant_id, event_type, **published)
     return "processed"

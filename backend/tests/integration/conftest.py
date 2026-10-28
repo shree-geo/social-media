@@ -170,7 +170,7 @@ class Jobs:
     queued: list[tuple[str, dict[str, object], float | None]]
 
     async def run_all(self) -> list[str]:
-        from app.services import ingestion, messaging
+        from app.services import channels, ingestion, messaging
 
         results: list[str] = []
         while self.queued:
@@ -181,6 +181,15 @@ class Jobs:
                 results.append(
                     await messaging.send(uuid.UUID(str(kwargs["tenant_id"])), uuid.UUID(str(kwargs["message_id"])))
                 )
+            elif name == "customers.fetch_profile":
+                found = await channels.fetch_profile(
+                    uuid.UUID(str(kwargs["tenant_id"])),
+                    uuid.UUID(str(kwargs["channel_account_id"])),
+                    str(kwargs["provider_user_id"]),
+                )
+                results.append("profile" if found else "no_profile")
+            else:
+                raise AssertionError(f"test harness does not know how to run job {name!r}")
         return results
 
 

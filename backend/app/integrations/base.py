@@ -82,6 +82,17 @@ class MessageStatusUpdate:
     timestamp: datetime
     error_code: str | None = None
     error_message: str | None = None
+    # False when receipts can refer to messages we never stored (e.g. sent before connecting).
+    retry_if_unknown: bool = True
+
+
+@dataclass(frozen=True)
+class ReadReceipt:
+    """Customer has read everything we sent up to ``watermark`` (Messenger reports reads this way)."""
+
+    channel_external_id: str
+    provider_user_id: str
+    watermark: datetime
 
 
 @dataclass(frozen=True)
@@ -99,7 +110,7 @@ class Unsupported:
     reason: str
 
 
-NormalizedEvent = InboundMessage | MessageStatusUpdate | AccountEvent | Unsupported
+NormalizedEvent = InboundMessage | MessageStatusUpdate | ReadReceipt | AccountEvent | Unsupported
 
 
 # --- outbound -----------------------------------------------------------------------
@@ -121,6 +132,12 @@ class OutboundText:
 @dataclass(frozen=True)
 class SendResult:
     provider_message_id: str
+
+
+@dataclass(frozen=True)
+class CustomerProfile:
+    name: str | None
+    phone: str | None = None
 
 
 class SocialChannelAdapter(ABC):
@@ -145,3 +162,7 @@ class SocialChannelAdapter(ABC):
     @abstractmethod
     async def send_text(self, account: ChannelAccountRef, to: str, message: OutboundText) -> SendResult:
         """Raise :class:`TransientSendError` or :class:`PermanentSendError` on failure."""
+
+    async def get_customer_profile(self, account: ChannelAccountRef, provider_user_id: str) -> CustomerProfile | None:
+        """Name (and phone if the provider has it) for a new customer; None when unavailable."""
+        return None

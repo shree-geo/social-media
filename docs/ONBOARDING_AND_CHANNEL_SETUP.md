@@ -282,9 +282,9 @@ A5  Test it
 | Step | Frontend | Backend |
 |---|---|---|
 | A1 | `POST /api/v1/channels/setup-sessions {provider: messenger}` → gets `session_id` + `state` | creates `channel_setup_sessions` row (state = random, expires 30 min); checks permission + plan limit |
-| A2 | Opens Facebook Login for Business with `config_id = META_LOGIN_CONFIG_ID_MESSENGER`, `response_type=code`, `state` | — |
-| A2→A3 | Receives `code` → `POST …/setup-sessions/{id}/oauth-callback {code, state}` | validates `state`; exchanges `code` → user token → **long-lived** user token; lists Pages (`/me/accounts`) with tasks; marks each Page connectable or not (no full control / already connected elsewhere / over limit); stores the user token **encrypted** for this session only |
-| A3→A4 | `POST …/setup-sessions/{id}/complete {page_ids}` | for each Page: gets **Page access token**, encrypts and stores in `channel_credentials`; creates `channel_connection` + `channel_account`; subscribes the Page to our app: `POST /{page-id}/subscribed_apps` with `messages, message_echoes, message_deliveries, message_reads, messaging_postbacks`; verifies by reading `subscribed_apps` back; fetches Page name + picture; deletes the session user token; audit `CHANNEL_CONNECTED` |
+| A2 | Opens Facebook Login for Business (JS SDK `FB.login` with `config_id = META_LOGIN_CONFIG_ID_MESSENGER`). The SDK is loaded and the setup session created *before* the click so the pop-up isn't blocked | — |
+| A2→A3 | Receives the short-lived user token → `POST …/setup-sessions/{id}/authorize {state, access_token}` | validates `state`; **`debug_token` must show our app id, a valid token and the scopes `pages_show_list`, `pages_messaging`, `pages_manage_metadata`** (blocks tokens issued to other apps); exchanges for a **long-lived** user token; lists Pages (`/me/accounts`) with tasks; marks each Page connectable or not (needs `MANAGE`+`MESSAGING` tasks / already connected to another business / over plan limit); stores the user token **encrypted** for this session only |
+| A3→A4 | `POST …/setup-sessions/{id}/complete {page_ids}` | for each Page: gets a fresh **Page access token**; subscribes the Page to our app (`POST /{page-id}/subscribed_apps` with `messages, message_echoes, message_deliveries, message_reads, messaging_postbacks`) and verifies by reading it back — **before** any DB write, so a failure changes nothing; then encrypts and stores the token in `channel_credentials`, creates/reuses `channel_connection` + `channel_account`; wipes the session user token; audit `CHANNEL_CONNECTED` |
 | A5 | listens on SSE for `message.created` on this account | normal inbound pipeline; the first message also marks the checklist item done |
 
 Nothing in A2 is our UI. If Meta changes its pop-up screens, our wizard still works — we only depend on the returned `code`.
@@ -488,12 +488,10 @@ GET  /api/v1/onboarding/checklist
 POST /api/v1/onboarding/checklist/dismiss
 
 POST /api/v1/channels/setup-sessions                     {provider, mode}
-POST /api/v1/channels/setup-sessions/{id}/oauth-callback {code, state}          (Messenger)
-GET  /api/v1/channels/setup-sessions/{id}                (connectable Pages, progress)
+POST /api/v1/channels/setup-sessions/{id}/authorize    {state, access_token}   (Messenger)
 POST /api/v1/channels/setup-sessions/{id}/complete       {page_ids} | {code, waba_id, phone_number_id}
 POST /api/v1/channels/setup-sessions/{id}/cancel
 GET  /api/v1/channels                                    (cards + health)
-POST /api/v1/channels/{id}/reconnect                     → new setup session
 POST /api/v1/channels/{id}/disconnect
 
 POST /api/v1/webhooks/meta/deauthorize                   (signed_request)

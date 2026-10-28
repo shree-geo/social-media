@@ -2,7 +2,7 @@ import uuid
 
 from app.core.database import platform_sessionmaker
 from app.core.logging import get_logger
-from app.services import ingestion, messaging, onboarding
+from app.services import channels, ingestion, messaging, onboarding
 from app.workers.celery_app import celery_app, run_async
 from app.workers.queue import enqueue
 
@@ -55,4 +55,17 @@ def sweep() -> dict[str, int]:
     counts = run_async(_sweep())
     if any(counts.values()):
         log.info("sweep", **counts)
+    return counts
+
+
+@celery_app.task(name="customers.fetch_profile")
+def fetch_customer_profile(tenant_id: str, channel_account_id: str, provider_user_id: str) -> bool:
+    return run_async(channels.fetch_profile(uuid.UUID(tenant_id), uuid.UUID(channel_account_id), provider_user_id))
+
+
+@celery_app.task(name="channels.check_health")
+def check_channel_health() -> dict[str, int]:
+    """Daily: token still valid and our webhook subscription still in place for each Page."""
+    counts = run_async(channels.check_health())
+    log.info("channel_health_checked", **counts)
     return counts

@@ -10,6 +10,7 @@ from app.core.config import get_settings
 from app.core.database import dispose_engines
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import configure_logging
+from app.integrations.setup import register_enabled_adapters
 from app.middleware.request_context import RequestContextMiddleware
 from app.services import realtime
 
@@ -46,6 +47,7 @@ def create_app() -> FastAPI:
     # Added last so it wraps everything, including CORS and error responses.
     app.add_middleware(RequestContextMiddleware, hsts=settings.cookie_secure)
 
+    register_enabled_adapters()
     register_exception_handlers(app)
     app.include_router(health.router)
     app.include_router(api_router, prefix="/api/v1")

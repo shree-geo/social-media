@@ -27,7 +27,7 @@ async def seed_reference_data(session: AsyncSession) -> tuple[int, int]:
         .values([{"code": code, "description": text} for code, text in PERMISSIONS.items()])
         .on_conflict_do_update(index_elements=["code"], set_={"description": insert(Permission).excluded.description})
     )
-    permission_ids = dict((await session.execute(select(Permission.code, Permission.id))).tuples().all())
+    permission_ids = dict((await session.execute(select(Permission.code, Permission.id))).all())
 
     for code, name in ROLE_NAMES.items():
         role = (

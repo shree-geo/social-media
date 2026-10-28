@@ -47,4 +47,5 @@ For hot reload, exposed database ports, local S3 storage and Mailpit, see [`docs
 
 - Phase 1 (Foundation): done — tenants, auth, subscriptions, platform console, onboarding.
 - Phase 2 (Customers + Inbox): done — webhook framework, identity resolution, duplicates/merge, unified inbox, replies, live updates.
-- Next: Phase 3 (Facebook Messenger connection wizard + adapter) — see spec §54 and `docs/ONBOARDING_AND_CHANNEL_SETUP.md`.
+- Phase 3 (Facebook Messenger): built — Messenger adapter, Connect Facebook Page wizard, channel health, deauthorize/data-deletion callbacks. Goes live once the Meta app values are configured (see `docs/DEVELOPMENT.md`).
+- Next: Phase 4 (WhatsApp Embedded Signup).

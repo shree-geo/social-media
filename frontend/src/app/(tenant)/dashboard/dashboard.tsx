@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useMe } from "@/components/tenant-shell";
 import { Alert, PageHeader, SubscriptionPill, cx } from "@/components/ui";
 import { api, type Me } from "@/lib/api";
+import type { ChannelsResponse } from "@/lib/channels";
 import type { ConversationPage } from "@/lib/inbox";
 
 function SubscriptionNotice({ subscription }: { subscription: Me["subscription"] }) {
@@ -84,7 +85,12 @@ function SetupSteps({ done }: { done: Set<string> }) {
                   <span className="sr-only">{complete ? " (done)" : isNext ? " (next step)" : ""}</span>
                 </p>
                 <p className="text-sm text-ink-muted">{step.body}</p>
-                {isNext && !complete && <p className="mt-1 text-xs font-medium text-primary">Available soon</p>}
+                {isNext && !complete && step.key === "facebook" && (
+                  <Link href="/channels/connect/messenger" className="mt-2 inline-flex min-h-9 items-center rounded-control bg-primary px-3 text-sm font-medium text-on-primary hover:bg-primary-hover">
+                    Connect Facebook Page
+                  </Link>
+                )}
+                {isNext && !complete && step.key !== "facebook" && <p className="mt-1 text-xs font-medium text-primary">Available soon</p>}
               </div>
             </li>
           );
@@ -92,6 +98,19 @@ function SetupSteps({ done }: { done: Set<string> }) {
       </ol>
     </section>
   );
+}
+
+function OwnerSetup() {
+  const channels = useQuery({
+    queryKey: ["channels"],
+    queryFn: () => api<ChannelsResponse>("tenant", "GET", "/api/v1/channels"),
+  });
+  const done = new Set<string>(["password"]);
+  const connected = channels.data?.items.filter((c) => c.status === "connected") ?? [];
+  if (connected.some((c) => c.provider === "messenger")) done.add("facebook");
+  if (connected.some((c) => c.provider === "whatsapp")) done.add("whatsapp");
+  if (connected.some((c) => c.last_webhook_at)) done.add("test");
+  return <SetupSteps done={done} />;
 }
 
 function WaitingSummary() {
@@ -144,7 +163,7 @@ export function Dashboard() {
       <SubscriptionNotice subscription={me.data.subscription} />
       <div className="grid gap-6">
         {canReadInbox && <WaitingSummary />}
-        {me.data.roles.some((r) => r === "OWNER" || r === "ADMIN") && <SetupSteps done={new Set(["password"])} />}
+        {me.data.roles.some((r) => r === "OWNER" || r === "ADMIN") && <OwnerSetup />}
       </div>
     </div>
   );

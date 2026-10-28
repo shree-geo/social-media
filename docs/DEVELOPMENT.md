@@ -125,6 +125,27 @@ Rules:
 - Every tenant-owned table gets RLS enabled + forced and the `tenant_isolation` policy in the same migration that creates it (see `DATABASE.md` §3).
 - Migrations must be backward compatible with the previous app version (expand → migrate → contract).
 
+## Connecting a real Facebook Page (Messenger)
+
+Messenger switches on automatically when these are set in `.env` (then `docker compose restart backend worker beat`):
+
+```env
+META_APP_ID=...                      # Meta app (Business type) with Messenger + Facebook Login for Business
+META_APP_SECRET=...
+META_GRAPH_API_VERSION=v23.0         # the version your Meta app dashboard shows; pin it
+META_WEBHOOK_VERIFY_TOKEN=...        # any long random string; also typed into the Meta dashboard
+META_LOGIN_CONFIG_ID_MESSENGER=...   # Facebook Login for Business configuration with the permissions below
+```
+
+In the Meta app dashboard:
+
+1. **Facebook Login for Business → Configurations**: create one with `pages_show_list`, `pages_messaging`, `pages_manage_metadata`; copy its ID into `META_LOGIN_CONFIG_ID_MESSENGER`. Add your local/tunnel domain to *Allowed domains for the JavaScript SDK*.
+2. **Messenger → Webhooks**: callback URL `https://<tunnel>/api/v1/webhooks/messenger`, verify token = `META_WEBHOOK_VERIFY_TOKEN`, fields `messages, message_echoes, message_deliveries, message_reads, messaging_postbacks`.
+3. **App settings → Advanced**: *Deauthorize callback* `https://<tunnel>/api/v1/webhooks/meta/deauthorize`, *Data deletion request URL* `https://<tunnel>/api/v1/webhooks/meta/data-deletion`.
+4. While the app is in development mode, only people with a role on the app (admins, developers, testers) can connect Pages — add the test Facebook account there.
+
+Then log in as a business Owner → **Channels → Connect Facebook Page**. Customer names on Messenger need Meta's User Profile access; without it new customers show as "Unknown customer" until renamed.
+
 ## Meta webhooks locally
 
 Meta must reach a public HTTPS URL. Use a tunnel (Cloudflare Tunnel or ngrok) to `http://localhost:8080` and configure the callback URLs from `ONBOARDING_AND_CHANNEL_SETUP.md` §2 in the Meta app dashboard.

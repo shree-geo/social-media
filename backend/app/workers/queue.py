@@ -15,6 +15,7 @@ log = get_logger(__name__)
 TASK_QUEUES = {
     "webhooks.process_event": "webhooks",
     "messages.send": "outbound",
+    "customers.fetch_profile": "default",
 }
 
 

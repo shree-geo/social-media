@@ -28,6 +28,8 @@ class ChannelConnection(UUIDPrimaryKey, TenantOwned, Timestamps, Base):
     provider: Mapped[str]
     status: Mapped[str] = mapped_column(server_default=text("'pending'"))
     external_business_id: Mapped[str | None]
+    # The Facebook user who authorized it: Meta's deauthorize callback identifies them by this id.
+    external_user_id: Mapped[str | None] = mapped_column(index=True)
     connected_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
     connected_at: Mapped[datetime | None]
     disconnected_at: Mapped[datetime | None]
@@ -104,6 +106,42 @@ class ChannelCredential(UUIDPrimaryKey, TenantOwned, Timestamps, Base):
     expires_at: Mapped[datetime | None]
     last_checked_at: Mapped[datetime | None]
     revoked_at: Mapped[datetime | None]
+
+
+SETUP_STATUSES = ("started", "authorized", "completing", "completed", "failed", "cancelled", "expired")
+
+
+class ChannelSetupSession(UUIDPrimaryKey, TenantOwned, Timestamps, Base):
+    """One run of a connect wizard (ONBOARDING_AND_CHANNEL_SETUP.md §6-7).
+
+    Holds the OAuth ``state`` (hash only), progress and the last error so a failed
+    attempt can be resumed and support can see where it stopped. The Facebook user
+    token is kept encrypted only while the wizard runs and wiped when it ends.
+    """
+
+    __tablename__ = "channel_setup_sessions"
+    __extra_table_args__ = (
+        CheckConstraint(check_in("provider", PROVIDERS), name="provider"),
+        CheckConstraint(check_in("status", SETUP_STATUSES), name="status"),
+        Index("channel_setup_sessions_state_hash_key", "state_hash", unique=True),
+        Index("ix_channel_setup_sessions_tenant_id_created_at", "tenant_id", text("created_at DESC")),
+    )
+
+    provider: Mapped[str]
+    mode: Mapped[str]  # page | new_number | coexistence
+    state_hash: Mapped[str]
+    status: Mapped[str] = mapped_column(server_default=text("'started'"))
+    steps_completed: Mapped[list[Any]] = mapped_column(server_default=text("'[]'::jsonb"))
+    meta_session_info: Mapped[dict[str, Any]] = mapped_column(server_default=text("'{}'::jsonb"))  # never tokens
+    external_user_id: Mapped[str | None]
+    temp_token_ciphertext: Mapped[bytes | None]
+    temp_token_nonce: Mapped[bytes | None]
+    temp_token_key_version: Mapped[int | None] = mapped_column(Integer)
+    last_error_code: Mapped[str | None]
+    last_error_message: Mapped[str | None]
+    channel_account_id: Mapped[uuid.UUID | None]
+    started_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    expires_at: Mapped[datetime]
 
 
 class WebhookEvent(UUIDPrimaryKey, Base):

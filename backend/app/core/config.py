@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     meta_app_secret: str = ""
     meta_graph_api_version: str = ""
     meta_webhook_verify_token: str = ""
+    meta_login_config_id_messenger: str = ""
+    meta_login_config_id_whatsapp: str = ""
+
+    @property
+    def meta_configured(self) -> bool:
+        """All values needed to talk to Meta (ONBOARDING_AND_CHANNEL_SETUP.md §2) are present."""
+        return bool(self.meta_app_id and self.meta_app_secret and self.meta_graph_api_version)
 
     s3_endpoint: str = ""
     s3_region: str = "us-east-1"

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 
 from app.api.deps import verify_csrf
-from app.api.v1 import auth, conversations, customers, events, users, webhooks
+from app.api.v1 import auth, channels, conversations, customers, events, meta_callbacks, users, webhooks
 from app.api.v1.platform import auth as platform_auth
 from app.api.v1.platform import tenants as platform_tenants
 
@@ -13,6 +13,7 @@ api_router.include_router(users.router)
 api_router.include_router(customers.router)
 api_router.include_router(conversations.router)
 api_router.include_router(events.router)
+api_router.include_router(channels.router)
 
 platform_router = APIRouter(prefix="/platform")
 platform_router.include_router(platform_auth.router)
@@ -20,4 +21,6 @@ platform_router.include_router(platform_tenants.router)
 api_router.include_router(platform_router)
 
 webhook_router = APIRouter()
+# Meta callbacks first: /webhooks/meta/... must not be captured by /webhooks/{provider}.
+webhook_router.include_router(meta_callbacks.router)
 webhook_router.include_router(webhooks.router)

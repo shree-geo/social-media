@@ -10,14 +10,13 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.crypto import EncryptedBlob, decrypt
 from app.core.database import platform_sessionmaker, runtime_sessionmaker, set_tenant_context
 from app.core.exceptions import AppError, NotFound
 from app.core.logging import get_logger
 from app.integrations import registry
 from app.integrations.base import ChannelAccountRef, OutboundText, PermanentSendError, TransientSendError
-from app.models import ChannelAccount, ChannelCredential, Conversation, CustomerIdentity, Message
-from app.services import realtime
+from app.models import ChannelAccount, Conversation, CustomerIdentity, Message
+from app.services import channels, realtime
 from app.workers.queue import enqueue
 
 log = get_logger(__name__)
@@ -73,29 +72,13 @@ async def queue_text(
 
 
 async def _access_token(session: AsyncSession, account: ChannelAccount) -> str:
-    credential = (
-        await session.execute(
-            select(ChannelCredential)
-            .where(
-                ChannelCredential.tenant_id == account.tenant_id,
-                ChannelCredential.connection_id == account.connection_id,
-                ChannelCredential.revoked_at.is_(None),
-                (ChannelCredential.channel_account_id == account.id) | ChannelCredential.channel_account_id.is_(None),
-            )
-            # Account-level token (Page token) wins over the connection-level one.
-            .order_by(ChannelCredential.channel_account_id.is_(None))
-            .limit(1)
-        )
-    ).scalar_one_or_none()
-    if credential is None:
+    token = await channels.access_token(session, account)
+    if token is None:
         raise PermanentSendError("No credential for this channel", code="no_credential")
-    blob = EncryptedBlob(credential.key_version, credential.nonce, credential.ciphertext)
-    return decrypt(blob, credential_aad(account.tenant_id, credential.id)).decode()
+    return token
 
 
-def credential_aad(tenant_id: uuid.UUID, credential_id: uuid.UUID) -> bytes:
-    """Binds a ciphertext to its row: a blob copied elsewhere fails to decrypt."""
-    return f"{tenant_id}|{credential_id}".encode()
+credential_aad = channels.credential_aad  # kept for existing imports
 
 
 async def send(tenant_id: uuid.UUID, message_id: uuid.UUID) -> str:

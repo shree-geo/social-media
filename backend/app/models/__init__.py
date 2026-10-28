@@ -1,7 +1,14 @@
 """All models are imported here so Alembic sees the full metadata."""
 
 from app.models.base import Base
-from app.models.channels import ChannelAccount, ChannelConnection, ChannelCredential, WebhookEvent, WebhookEventAttempt
+from app.models.channels import (
+    ChannelAccount,
+    ChannelConnection,
+    ChannelCredential,
+    ChannelSetupSession,
+    WebhookEvent,
+    WebhookEventAttempt,
+)
 from app.models.conversations import Conversation, Message, MessageAttachment, MessageEvent
 from app.models.customers import (
     Customer,
@@ -45,6 +52,7 @@ __all__ = [
     "ChannelAccount",
     "ChannelConnection",
     "ChannelCredential",
+    "ChannelSetupSession",
     "Conversation",
     "Customer",
     "CustomerAddress",

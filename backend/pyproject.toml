@@ -61,6 +61,7 @@ known-third-party = ["alembic"]
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*" = ["E501"]
 "tests/**" = ["S105", "S106", "S107", "S608"]
+"app/services/channels.py" = ["S106"]  # token_status values ("valid", "revoked") are statuses, not secrets
 
 [tool.mypy]
 python_version = "3.12"
