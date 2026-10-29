@@ -1,0 +1,15 @@
+# Test server (myleadtoday.cloud) on a VPS shared with other apps.
+# The host's nginx terminates TLS (infra/nginx/myleadtoday.conf) and proxies to 127.0.0.1:8040.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml -f docker-compose.server.yml up -d
+name: socialcommerce
+
+services:
+  nginx:
+    ports: !override
+      - "127.0.0.1:8040:80"
+
+  # No external object storage or email provider yet: keep the bundled ones, unpublished.
+  storage:
+    profiles: !reset []
+  mailpit:
+    profiles: !reset []
