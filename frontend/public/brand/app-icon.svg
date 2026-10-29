@@ -1,7 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- MyLeadToday app icon: a marigold chat bubble carrying a rising line (chats turning into sales) on brand indigo. -->
+  <!-- MyLeadToday app icon: an "M" whose last stroke rises into an arrow (leads growing), marigold on brand indigo. -->
   <rect width="1024" height="1024" fill="#24306e"/>
-  <path d="M512 200c-190 0-344 128-344 290 0 92 50 174 128 228l-30 126 140-76c34 8 69 12 106 12 190 0 344-128 344-290S702 200 512 200z" fill="#e9a23b"/>
-  <polyline points="330,560 450,450 540,520 690,380" fill="none" stroke="#24306e" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
-  <polyline points="610,370 700,370 700,460" fill="none" stroke="#24306e" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="250,770 250,330 500,610 760,300" fill="none" stroke="#e9a23b" stroke-width="110" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="600,290 772,288 770,460" fill="none" stroke="#e9a23b" stroke-width="110" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
