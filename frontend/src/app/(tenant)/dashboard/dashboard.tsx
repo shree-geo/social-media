@@ -10,6 +10,8 @@ import { api, type Me } from "@/lib/api";
 import type { ChannelsResponse } from "@/lib/channels";
 import type { ConversationPage } from "@/lib/inbox";
 
+import { BusinessReport } from "./business-report";
+
 function SubscriptionNotice({ subscription }: { subscription: Me["subscription"] }) {
   const { status, days_remaining, expiry_date } = subscription;
   const date = expiry_date ? new Date(expiry_date).toLocaleDateString(undefined, { dateStyle: "medium" }) : "";
@@ -185,10 +187,12 @@ export function Dashboard() {
   const me = useMe(); // session checks and redirects live in TenantShell
   if (!me.data) return null;
   const canReadInbox = me.data.permissions.includes("conversation.read");
+  const canReadReports = me.data.permissions.includes("report.read");
+  const isOwner = me.data.roles.some((r) => r === "OWNER" || r === "ADMIN");
   const firstName = me.data.full_name.split(" ")[0];
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    <div className={cx("mx-auto w-full", canReadReports ? "max-w-6xl" : "max-w-3xl")}>
       <PageHeader
         title={`Namaste, ${firstName}`}
         description={
@@ -200,9 +204,12 @@ export function Dashboard() {
       />
       <SubscriptionNotice subscription={me.data.subscription} />
       <div className="grid gap-6">
-        {canReadInbox && <WaitingSummary />}
-        {me.data.permissions.includes("delivery.read") && <DeliveriesSummary mine={me.data.roles.includes("DELIVERY")} />}
-        {me.data.roles.some((r) => r === "OWNER" || r === "ADMIN") && <OwnerSetup />}
+        <div className={cx("grid gap-6", canReadReports && "lg:grid-cols-2")}>
+          {canReadInbox && <WaitingSummary />}
+          {me.data.permissions.includes("delivery.read") && <DeliveriesSummary mine={me.data.roles.includes("DELIVERY")} />}
+        </div>
+        {canReadReports && <BusinessReport />}
+        {isOwner && <OwnerSetup />}
       </div>
     </div>
   );

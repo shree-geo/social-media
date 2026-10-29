@@ -12,6 +12,7 @@ from app.api.v1 import (
     orders,
     products,
     public,
+    reports,
     users,
     webhooks,
 )
@@ -32,6 +33,7 @@ api_router.include_router(products.router)
 api_router.include_router(orders.router)
 api_router.include_router(fulfilment.router)
 api_router.include_router(public.router)
+api_router.include_router(reports.router)
 
 platform_router = APIRouter(prefix="/platform")
 platform_router.include_router(platform_auth.router)
