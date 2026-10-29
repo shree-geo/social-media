@@ -54,8 +54,11 @@ async def stream(request: Request) -> StreamingResponse:
                     yield f"event: {event['type']}\ndata: {json.dumps(event)}\n\n"
         finally:
             if pending:
+                # Cancelling the running __anext__ unwinds the generator (its finally unsubscribes);
+                # aclose() on a generator that is still running would raise RuntimeError.
                 pending.cancel()
-            await source.aclose()  # type: ignore[attr-defined]
+            else:
+                await source.aclose()  # type: ignore[attr-defined]
 
     return StreamingResponse(
         events(),

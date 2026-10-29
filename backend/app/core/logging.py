@@ -83,6 +83,9 @@ def configure_logging(level: str = "INFO", json: bool = True) -> None:
     # Access logs are produced by our own middleware.
     logging.getLogger("uvicorn.access").handlers = []
     logging.getLogger("uvicorn.access").propagate = False
+    # httpx logs every request URL at INFO, and Graph API URLs carry access tokens.
+    for noisy in ("httpx", "httpcore"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
 def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
