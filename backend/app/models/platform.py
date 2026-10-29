@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     ForeignKeyConstraint,
     Index,
+    SmallInteger,
     String,
     UniqueConstraint,
     text,
@@ -45,6 +46,18 @@ class PlatformUser(UUIDPrimaryKey, Timestamps, Base):
     failed_login_count: Mapped[int] = mapped_column(server_default=text("0"))
     locked_until: Mapped[datetime | None]
     last_login_at: Mapped[datetime | None]
+
+
+class PlatformSetting(Timestamps, Base):
+    """Platform-wide settings a super admin edits (one row). Shown on the public website."""
+
+    __tablename__ = "platform_settings"
+    __table_args__ = (CheckConstraint("id = 1", name="single_row"),)
+
+    id: Mapped[int] = mapped_column(SmallInteger, primary_key=True, server_default=text("1"))
+    support_phone: Mapped[str | None] = mapped_column(String(30))
+    support_email: Mapped[str | None] = mapped_column(CITEXT)
+    updated_by_platform_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("platform_users.id"))
 
 
 class Plan(UUIDPrimaryKey, Timestamps, Base):

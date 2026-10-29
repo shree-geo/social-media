@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore", case_sensitive=False)
 
     app_env: Literal["development", "test", "staging", "production"] = "development"
-    app_name: str = "SocialCommerce"
+    app_name: str = "MyLeadToday"
     app_base_url: str = "http://localhost:8080"
     log_level: str = "INFO"
 

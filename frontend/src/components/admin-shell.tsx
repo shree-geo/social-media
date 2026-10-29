@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Building2, LogOut, Package, PlusCircle, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Building2, LogOut, Package, PlusCircle, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
@@ -14,6 +14,7 @@ const NAV: { href: string; label: string; icon: LucideIcon; exact: boolean }[] =
   { href: "/admin/tenants", label: "Businesses", icon: Building2, exact: true },
   { href: "/admin/tenants/new", label: "Add a business", icon: PlusCircle, exact: true },
   { href: "/admin/plans", label: "Packages", icon: Package, exact: false },
+  { href: "/admin/settings", label: "Settings", icon: Settings, exact: true },
 ];
 
 function AdminNav() {

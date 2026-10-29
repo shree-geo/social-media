@@ -2,6 +2,7 @@ import { MessageCircle, MessagesSquare, ShoppingBag, Truck, Wallet, type LucideI
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { ReachUs } from "@/components/site-contact";
 import { brand } from "@/config/brand";
 
 /** What the product does, in the order a sale happens. */
@@ -44,7 +45,7 @@ export function AuthScreen({ children, audience = "business" }: { children: Reac
             </ol>
           </div>
           <p className="hidden text-sm opacity-70 lg:block">
-            Need help logging in? Call us on {brand.supportPhone}. ·{" "}
+            Need help logging in? Please <ReachUs linkClassName="underline hover:opacity-100" />. ·{" "}
             <Link href="/privacy" className="underline hover:opacity-100">
               Privacy policy
             </Link>

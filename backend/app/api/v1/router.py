@@ -11,10 +11,12 @@ from app.api.v1 import (
     meta_callbacks,
     orders,
     products,
+    public,
     users,
     webhooks,
 )
 from app.api.v1.platform import auth as platform_auth
+from app.api.v1.platform import settings as platform_settings
 from app.api.v1.platform import tenants as platform_tenants
 
 # Every cookie-authenticated route requires the CSRF header on state-changing methods.
@@ -29,10 +31,12 @@ api_router.include_router(channels.router)
 api_router.include_router(products.router)
 api_router.include_router(orders.router)
 api_router.include_router(fulfilment.router)
+api_router.include_router(public.router)
 
 platform_router = APIRouter(prefix="/platform")
 platform_router.include_router(platform_auth.router)
 platform_router.include_router(platform_tenants.router)
+platform_router.include_router(platform_settings.router)
 api_router.include_router(platform_router)
 
 webhook_router = APIRouter()

@@ -147,3 +147,15 @@ class TenantListItem(BaseModel):
 class RenewalOut(BaseModel):
     subscription: SubscriptionOut
     receipt_number: str
+
+
+class SiteContact(BaseModel):
+    """Support contact shown on the public website and login screens."""
+
+    support_phone: str | None
+    support_email: str | None
+
+
+class SiteContactIn(StrictModel):
+    support_phone: str | None = Field(default=None, max_length=30, pattern=r"^\+?[0-9 ()-]{6,30}$")
+    support_email: EmailStr | None = None
