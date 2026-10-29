@@ -9,6 +9,7 @@ Multi-tenant social-commerce SaaS for SMEs: WhatsApp and Facebook Messenger conv
 | [`docs/DATABASE.md`](docs/DATABASE.md) | Database design and ERD |
 | [`docs/ONBOARDING_AND_CHANNEL_SETUP.md`](docs/ONBOARDING_AND_CHANNEL_SETUP.md) | SME onboarding, Facebook and WhatsApp connection wizards |
 | [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | Local setup, running services, tests, migrations |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Server installation, HTTPS, updates, rollback, operations |
 
 ## Repository layout
 

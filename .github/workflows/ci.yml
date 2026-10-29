@@ -1,0 +1,89 @@
+# Lint, type-check and test every push and pull request.
+# Integration tests run against the project's own PostgreSQL (with its role init scripts), Redis and
+# SeaweedFS from docker-compose, on the same localhost ports as local development.
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start PostgreSQL, Redis and S3
+        working-directory: .
+        run: |
+          cp .env.example .env
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --wait postgres redis storage
+          # SeaweedFS has no healthcheck: wait until its S3 port answers.
+          timeout 60 sh -c 'until curl -s -o /dev/null http://localhost:8343; do sleep 2; done'
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.12.19"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install
+        run: uv sync --frozen
+
+      - name: Lint
+        run: |
+          uv run ruff check app tests
+          uv run ruff format --check app tests
+
+      - name: Type-check
+        run: uv run mypy app
+
+      - name: Unit tests
+        run: uv run pytest -q
+
+      - name: Integration tests
+        run: uv run pytest -q -m integration
+
+      - name: Service logs on failure
+        if: failure()
+        working-directory: .
+        run: docker compose -f docker-compose.yml -f docker-compose.dev.yml logs --tail 100 postgres storage
+
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npx next typegen && npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
