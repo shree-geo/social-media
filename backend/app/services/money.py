@@ -78,3 +78,25 @@ def totals(lines: Iterable[tuple[LineInput, LineAmounts]], *, shipping_fee: Deci
     return Totals(
         subtotal=subtotal, discount_total=discount, tax_total=tax, shipping_fee=shipping, grand_total=grand + shipping
     )
+
+
+@dataclass(frozen=True)
+class Balance:
+    amount_paid: Decimal
+    amount_due: Decimal
+    payment_status: str
+
+
+def balance(grand_total: Decimal, *, paid: Decimal, refunded: Decimal) -> Balance:
+    """Balance rule from DATABASE.md §12; ``paid``/``refunded`` are sums of recorded (not voided) rows."""
+    amount_paid = money(paid - refunded)
+    amount_due = money(grand_total - amount_paid)
+    if amount_paid > 0 and amount_due <= 0:
+        status = "PAID"
+    elif refunded > 0 and amount_paid <= 0:
+        status = "REFUNDED"
+    elif amount_paid > 0:
+        status = "PARTIAL"
+    else:
+        status = "UNPAID"
+    return Balance(amount_paid=amount_paid, amount_due=amount_due, payment_status=status)

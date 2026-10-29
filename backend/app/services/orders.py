@@ -20,6 +20,8 @@ from app.models import (
     Conversation,
     Customer,
     CustomerAddress,
+    Delivery,
+    DeliveryStatusHistory,
     Invoice,
     Order,
     OrderItem,
@@ -27,6 +29,7 @@ from app.models import (
     Tenant,
     TenantSettings,
 )
+from app.models.fulfilment import DELIVERY_CLOSED
 from app.services import audit, catalogue, entitlements, money, numbering
 from app.services.audit import RequestInfo
 from app.services.subscriptions import tenant_today
@@ -46,6 +49,8 @@ STOCK_OUT = {"CONFIRMED"}
 # Leaving these states puts stock back, but only if it was taken out (i.e. after confirmation).
 STOCK_BACK = {"CANCELLED", "RETURNED"}
 NEEDS_REASON = {"CANCELLED", "REJECTED", "RETURNED"}
+# While a delivery is open these order steps follow the delivery (deliveries.change_status).
+DELIVERY_DRIVEN = {"OUT_FOR_DELIVERY", "DELIVERED"}
 
 
 class InvalidOrder(AppError):
@@ -121,6 +126,8 @@ def _apply_totals(order: Order, items: list[OrderItem], inclusive: bool) -> None
         t.grand_total,
     )
     order.amount_due = t.grand_total - order.amount_paid
+    if order.amount_paid > 0:  # an advance paid while the order was new counts against the new total
+        order.payment_status = money.balance(t.grand_total, paid=order.amount_paid, refunded=money.ZERO).payment_status
 
 
 async def _default_address(session: AsyncSession, customer_id: uuid.UUID) -> dict[str, Any] | None:
@@ -243,6 +250,14 @@ async def order_items(session: AsyncSession, order_id: uuid.UUID) -> list[OrderI
     )
 
 
+async def open_delivery_for(session: AsyncSession, order_id: uuid.UUID) -> Delivery | None:
+    return (
+        await session.execute(
+            select(Delivery).where(Delivery.order_id == order_id, Delivery.status.not_in(DELIVERY_CLOSED))
+        )
+    ).scalar_one_or_none()
+
+
 async def _locked(session: AsyncSession, order_id: uuid.UUID) -> Order:
     order = (await session.execute(select(Order).where(Order.id == order_id).with_for_update())).scalar_one_or_none()
     if order is None:
@@ -309,6 +324,7 @@ async def change_status(
     reason: str | None,
     user_id: uuid.UUID,
     request: RequestInfo,
+    via_delivery: bool = False,
 ) -> Order:
     order = await _locked(session, order_id)
     current = order.status
@@ -326,6 +342,47 @@ async def change_status(
         ).scalar_one_or_none()
         if live_invoice:
             raise Conflict(f"Cancel invoice {live_invoice} first.", code="invoice_issued")
+
+    open_delivery = await open_delivery_for(session, order.id)
+    if open_delivery is not None and to_status in DELIVERY_DRIVEN and not via_delivery:
+        raise Conflict(
+            f"Update delivery {open_delivery.delivery_number} instead; the order follows it.", code="delivery_open"
+        )
+    if open_delivery is not None and to_status in ("CANCELLED", "REJECTED"):
+        session.add(
+            DeliveryStatusHistory(
+                tenant_id=tenant_id,
+                delivery_id=open_delivery.id,
+                from_status=open_delivery.status,
+                to_status="CANCELLED",
+                note="Order cancelled",
+                changed_by=user_id,
+            )
+        )
+        open_delivery.status, open_delivery.updated_by = "CANCELLED", user_id
+
+    if to_status == "RETURNED" and not via_delivery:
+        # Keep the delivery record in step when the return is recorded on the order itself.
+        delivered = (
+            await session.execute(
+                select(Delivery)
+                .where(Delivery.order_id == order.id, Delivery.status == "DELIVERED")
+                .order_by(Delivery.created_at.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if delivered is not None:
+            session.add(
+                DeliveryStatusHistory(
+                    tenant_id=tenant_id,
+                    delivery_id=delivered.id,
+                    from_status="DELIVERED",
+                    to_status="RETURNED",
+                    note=reason,
+                    changed_by=user_id,
+                )
+            )
+            delivered.status, delivered.updated_by = "RETURNED", user_id
 
     items = await order_items(session, order.id)
     tracked = await catalogue.variant_info(session, tenant_id, [i.variant_id for i in items])

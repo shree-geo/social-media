@@ -10,7 +10,9 @@ import {
   Package,
   Plug,
   ShoppingBag,
+  Truck,
   Users,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -25,15 +27,25 @@ import type { ConversationPage } from "@/lib/inbox";
 
 type NavItem = { href: string; label: string; icon: LucideIcon; permission: string | null; phone: boolean; badge?: number };
 
-// ``phone``: shown in the phone tab bar; the rest are under "More" there.
+// ``phone``: may be a phone tab (the first four someone can see); the rest are under "More" there.
 export const NAV: Omit<NavItem, "badge">[] = [
   { href: "/dashboard", label: "Home", icon: Home, permission: null, phone: true },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "conversation.read", phone: true },
   { href: "/orders", label: "Orders", icon: ShoppingBag, permission: "order.read", phone: true },
   { href: "/customers", label: "Customers", icon: Users, permission: "customer.read", phone: true },
+  { href: "/deliveries", label: "Deliveries", icon: Truck, permission: "delivery.read", phone: true },
+  { href: "/payments", label: "Payments", icon: Wallet, permission: "payment.read", phone: false },
   { href: "/products", label: "Products", icon: Package, permission: "product.read", phone: false },
   { href: "/channels", label: "Channels", icon: Plug, permission: "channel.manage", phone: false },
 ];
+
+const PHONE_TABS = 4;
+
+/** Splits the items someone may see into phone tabs (first four ``phone`` items) and the "More" list. */
+export function splitPhoneNav<T extends Pick<NavItem, "phone">>(items: T[]): { tabs: T[]; more: T[] } {
+  const tabs = items.filter((item) => item.phone).slice(0, PHONE_TABS);
+  return { tabs, more: items.filter((item) => !tabs.includes(item)) };
+}
 
 const MORE: NavItem = { href: "/more", label: "More", icon: Menu, permission: null, phone: true };
 
@@ -120,8 +132,8 @@ export function TenantShell({ children }: { children: ReactNode }) {
     badge: item.href === "/inbox" ? waiting : undefined,
   }));
 
-  const hidden = nav.filter((item) => !item.phone);
-  const phoneNav = hidden.length ? [...nav.filter((item) => item.phone), MORE] : nav;
+  const { tabs, more } = splitPhoneNav(nav);
+  const phoneNav = more.length ? [...tabs, MORE] : tabs;
 
   async function logout() {
     await api("tenant", "POST", "/api/v1/auth/logout").catch(() => undefined);

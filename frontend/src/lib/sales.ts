@@ -79,6 +79,8 @@ export type Order = OrderSummary & {
   source_conversation_id: string | null;
   history: { from_status: string | null; to_status: string; reason: string | null; at: string }[];
   invoices: InvoiceSummary[];
+  deliveries: Delivery[];
+  payments: Payment[];
   allowed_next: string[];
   version: number;
 };
@@ -157,3 +159,108 @@ export const PAYMENT_LABEL: Record<string, string> = {
   PAID: "Paid",
   REFUNDED: "Refunded",
 };
+
+export type Person = { id: string; name: string };
+
+export type OrderRef = {
+  id: string;
+  order_number: string;
+  status: string;
+  customer: Person;
+  grand_total: string;
+  amount_due: string;
+  currency: string;
+};
+
+export type Delivery = {
+  id: string;
+  delivery_number: string;
+  order: OrderRef;
+  method: string;
+  courier_name: string | null;
+  tracking_reference: string | null;
+  assigned_to: Person | null;
+  delivery_address: Record<string, string> | null;
+  contact_name: string | null;
+  contact_phone: string | null;
+  cod_amount: string;
+  status: string;
+  scheduled_date: string | null;
+  delivered_at: string | null;
+  notes: string | null;
+  allowed_next: string[];
+  history: { from_status: string | null; to_status: string; note: string | null; at: string }[];
+  created_at: string;
+};
+
+export type Payment = {
+  id: string;
+  payment_number: string;
+  order: OrderRef;
+  delivery_id: string | null;
+  type: "payment" | "refund";
+  amount: string;
+  currency: string;
+  method: string;
+  reference: string | null;
+  paid_at: string;
+  notes: string | null;
+  status: "recorded" | "voided";
+  void_reason: string | null;
+  recorded_by: Person | null;
+};
+
+export const DELIVERY_METHOD_LABEL: Record<string, string> = {
+  own_staff: "Our staff",
+  courier: "Courier",
+  customer_pickup: "Customer picks up",
+};
+
+export const DELIVERY_STATUS_LABEL: Record<string, string> = {
+  PENDING: "Not assigned",
+  ASSIGNED: "Assigned",
+  PICKED_UP: "Picked up",
+  OUT_FOR_DELIVERY: "On the way",
+  DELIVERED: "Delivered",
+  FAILED: "Failed",
+  RETURNED: "Returned",
+  CANCELLED: "Cancelled",
+};
+
+export const DELIVERY_TONE: Record<string, "neutral" | "primary" | "attention" | "success" | "danger"> = {
+  PENDING: "attention",
+  ASSIGNED: "primary",
+  PICKED_UP: "primary",
+  OUT_FOR_DELIVERY: "primary",
+  DELIVERED: "success",
+  FAILED: "danger",
+  RETURNED: "danger",
+  CANCELLED: "neutral",
+};
+
+/** Button wording for each next delivery status. */
+export const DELIVERY_ACTION: Record<string, string> = {
+  PICKED_UP: "Courier picked up",
+  OUT_FOR_DELIVERY: "On the way",
+  DELIVERED: "Delivered",
+  FAILED: "Couldn't deliver",
+  RETURNED: "Customer returned it",
+  CANCELLED: "Cancel delivery",
+};
+
+export const DELIVERY_NEEDS_NOTE = new Set(["FAILED", "RETURNED", "CANCELLED"]);
+
+export const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  cash: "Cash",
+  cod: "Cash on delivery",
+  esewa: "eSewa",
+  khalti: "Khalti",
+  fonepay: "Fonepay / QR",
+  bank_transfer: "Bank transfer",
+  cheque: "Cheque",
+  other: "Other",
+};
+
+export function addressText(address: Record<string, string> | null | undefined): string {
+  return address ? Object.values(address).filter(Boolean).join(", ") : "";
+}

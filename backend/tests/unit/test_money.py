@@ -2,7 +2,7 @@ from decimal import Decimal as D
 
 import pytest
 
-from app.services.money import InvalidLine, LineInput, line_amounts, money, totals
+from app.services.money import InvalidLine, LineInput, balance, line_amounts, money, totals
 
 
 def test_tax_exclusive_line() -> None:
@@ -54,3 +54,18 @@ def test_order_totals_with_shipping() -> None:
 
 def test_money_rounds_half_up() -> None:
     assert money("2.345") == D("2.35") and money("2.344") == D("2.34")
+
+
+@pytest.mark.parametrize(
+    ("paid", "refunded", "expected"),
+    [
+        ("0", "0", ("0.00", "1000.00", "UNPAID")),
+        ("400", "0", ("400.00", "600.00", "PARTIAL")),
+        ("1000", "0", ("1000.00", "0.00", "PAID")),
+        ("1000", "300", ("700.00", "300.00", "PARTIAL")),
+        ("1000", "1000", ("0.00", "1000.00", "REFUNDED")),
+    ],
+)
+def test_balance_rule(paid: str, refunded: str, expected: tuple[str, str, str]) -> None:
+    b = balance(D("1000"), paid=D(paid), refunded=D(refunded))
+    assert (str(b.amount_paid), str(b.amount_due), b.payment_status) == expected

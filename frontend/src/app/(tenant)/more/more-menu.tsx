@@ -3,14 +3,14 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
-import { NAV, useMe } from "@/components/tenant-shell";
+import { NAV, splitPhoneNav, useMe } from "@/components/tenant-shell";
 import { PageHeader } from "@/components/ui";
 
 /** Phone-only list of sections that don't fit in the tab bar. */
 export function MoreMenu() {
   const me = useMe();
   const allowed = new Set(me.data?.permissions ?? []);
-  const items = NAV.filter((item) => !item.phone && (item.permission === null || allowed.has(item.permission)));
+  const items = splitPhoneNav(NAV.filter((item) => item.permission === null || allowed.has(item.permission))).more;
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-6">
       <PageHeader title="More" />

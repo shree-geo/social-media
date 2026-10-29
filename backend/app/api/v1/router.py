@@ -7,6 +7,7 @@ from app.api.v1 import (
     conversations,
     customers,
     events,
+    fulfilment,
     meta_callbacks,
     orders,
     products,
@@ -27,6 +28,7 @@ api_router.include_router(events.router)
 api_router.include_router(channels.router)
 api_router.include_router(products.router)
 api_router.include_router(orders.router)
+api_router.include_router(fulfilment.router)
 
 platform_router = APIRouter(prefix="/platform")
 platform_router.include_router(platform_auth.router)

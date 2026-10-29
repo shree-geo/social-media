@@ -50,4 +50,5 @@ For hot reload, exposed database ports, local S3 storage and Mailpit, see [`docs
 - Phase 3 (Facebook Messenger): built — Messenger adapter, Connect Facebook Page wizard, channel health, deauthorize/data-deletion callbacks. Goes live once the Meta app values are configured (see `docs/DEVELOPMENT.md`).
 - Phase 4 (WhatsApp): built — Cloud API adapter, Embedded Signup wizard (new number or keep the WhatsApp Business app), resumable activation, quality and display-name tracking. Goes live with the Meta app values (see `docs/DEVELOPMENT.md`).
 - Phase 5 (Sales): built — products with variants, prices and stock; orders from a chat, phone or walk-in with status flow and stock movement; tax invoices (bilingual PDF, numbered per fiscal year, locked once issued); file storage (S3 / SeaweedFS locally); orders on Customer 360.
-- Next: Phase 6 (manual payments and deliveries).
+- Phase 6 (Deliveries and payments): built — deliveries by own staff, courier or customer pickup with a status trail that moves the order along; cash on delivery recorded at the doorstep; payments and refunds (cash, eSewa, Khalti, Fonepay, bank, cheque) that are never edited, only voided with a reason; paid/due balances on orders and invoices; Deliveries and Payments pages, rider view on the phone.
+- Next: Phase 7 (dashboard and reports).

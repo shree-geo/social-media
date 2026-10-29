@@ -27,6 +27,7 @@ from app.models import (
     CustomerTagLink,
     Invoice,
     Order,
+    Payment,
 )
 from app.services import audit, phones
 from app.services.audit import RequestInfo
@@ -235,6 +236,7 @@ _MOVABLE: tuple[tuple[str, Any], ...] = (
     ("customer_notes", CustomerNote),
     ("orders", Order),
     ("invoices", Invoice),
+    ("payments", Payment),
 )
 
 

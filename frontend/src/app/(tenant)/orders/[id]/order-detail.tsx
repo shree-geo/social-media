@@ -1,18 +1,23 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, FileText, MessageCircle, ReceiptText, X } from "lucide-react";
+import { ArrowLeft, FileText, MessageCircle, Plus, ReceiptText, Truck, Undo2, X } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState, type FormEvent } from "react";
 
+import { ContactLine, DeliveryActions, Modal, NewDeliveryForm, RecordPaymentForm, VoidPaymentForm } from "@/components/fulfilment";
 import { useMe } from "@/components/tenant-shell";
 import { Alert, Button, Panel, Pill, Spinner, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { formatTime } from "@/lib/inbox";
 import {
+  DELIVERY_METHOD_LABEL,
+  DELIVERY_STATUS_LABEL,
+  DELIVERY_TONE,
   LEAD_LABEL,
   NEEDS_REASON,
+  PAYMENT_METHOD_LABEL,
   PAYMENT_LABEL,
   SOURCE_LABEL,
   STATUS_ACTION,
@@ -20,7 +25,9 @@ import {
   STATUS_TONE,
   formatMoney,
   formatQty,
+  addressText,
   type Order,
+  type Payment,
 } from "@/lib/sales";
 
 function ReasonDialog({ title, confirmLabel, onSubmit, onClose, busy }: {
@@ -75,6 +82,7 @@ export function OrderDetail() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState<{ kind: "status"; status: string } | { kind: "invoice"; invoiceId: string } | null>(null);
+  const [sheet, setSheet] = useState<"delivery" | "payment" | "refund" | { void: Payment } | null>(null);
   const can = (p: string) => me.data?.permissions.includes(p) ?? false;
 
   const order = useQuery({ queryKey: ["order", id], queryFn: () => api<Order>("tenant", "GET", `/api/v1/orders/${id}`) });
@@ -85,6 +93,8 @@ export function OrderDetail() {
     setAsking(null);
     void queryClient.invalidateQueries({ queryKey: ["orders"] });
     void queryClient.invalidateQueries({ queryKey: ["order", id] });
+    void queryClient.invalidateQueries({ queryKey: ["deliveries"] });
+    void queryClient.invalidateQueries({ queryKey: ["payments"] });
   };
 
   const move = useMutation({
@@ -114,9 +124,12 @@ export function OrderDetail() {
   const o = order.data;
   const t = o.totals;
   const forward = o.allowed_next.filter((s) => !NEEDS_REASON.has(s));
-  const stops = o.allowed_next.filter((s) => NEEDS_REASON.has(s));
+  // A delivered order is returned from its delivery card, which keeps both records in step.
+  const delivered = o.deliveries.some((d) => d.status === "DELIVERED");
+  const stops = o.allowed_next.filter((s) => NEEDS_REASON.has(s) && !(s === "RETURNED" && delivered));
   const liveInvoice = o.invoices.find((v) => v.status === "ISSUED");
   const canInvoice = can("invoice.write") && !liveInvoice && !["NEW", "CANCELLED", "REJECTED"].includes(o.status);
+  const openDelivery = o.deliveries.find((d) => !["DELIVERED", "FAILED", "RETURNED", "CANCELLED"].includes(d.status));
   const address = o.delivery_address ? Object.values(o.delivery_address).filter(Boolean).join(", ") : null;
 
   return (
@@ -153,7 +166,7 @@ export function OrderDetail() {
 
       {error && <Alert tone="error">{error}</Alert>}
 
-      {can("order.write") && o.allowed_next.length > 0 && (
+      {can("order.write") && forward.length + stops.length > 0 && (
         <div className="mb-5 flex flex-wrap gap-2">
           {forward.map((s) => (
             <Button key={s} loading={move.isPending && move.variables?.status === s} onClick={() => move.mutate({ status: s })}>
@@ -223,6 +236,107 @@ export function OrderDetail() {
           </dl>
         </Panel>
 
+        {can("payment.read") && (
+          <Panel
+            title="Payments"
+            actions={
+              can("payment.write") && (
+                <div className="flex gap-1">
+                  {Number(t.amount_paid) > 0 && (
+                    <Button size="sm" variant="ghost" icon={Undo2} onClick={() => setSheet("refund")}>
+                      Refund
+                    </Button>
+                  )}
+                  {Number(t.amount_due) > 0 && !["CANCELLED", "REJECTED"].includes(o.status) && (
+                    <Button size="sm" icon={Plus} onClick={() => setSheet("payment")}>
+                      Record payment
+                    </Button>
+                  )}
+                </div>
+              )
+            }
+          >
+            {o.payments.length === 0 ? (
+              <p className="text-sm text-ink-muted">Nothing received yet. Record advance payments, eSewa or bank transfers here as they come in.</p>
+            ) : (
+              <ul className="-mx-5 -my-4 divide-y divide-line">
+                {o.payments.map((p) => (
+                  <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 px-5 py-3">
+                    <div className="min-w-0">
+                      <p className={cx("font-medium", p.status === "voided" ? "text-ink-subtle line-through" : "text-ink")}>
+                        <span className="tabular">
+                          {p.type === "refund" ? "− " : ""}
+                          {formatMoney(p.amount, p.currency)}
+                        </span>{" "}
+                        <span className="font-normal text-ink-muted">
+                          {p.type === "refund" ? "refunded" : "by"} {PAYMENT_METHOD_LABEL[p.method] ?? p.method}
+                        </span>
+                      </p>
+                      <p className="text-xs text-ink-subtle">
+                        {p.payment_number} · {formatTime(p.paid_at)}
+                        {p.reference && ` · Ref ${p.reference}`}
+                        {p.recorded_by && ` · ${p.recorded_by.name}`}
+                      </p>
+                      {p.status === "voided" && <p className="text-xs text-danger">Voided: {p.void_reason}</p>}
+                    </div>
+                    {p.status === "recorded" && can("payment.write") && (
+                      <Button size="sm" variant="ghost" onClick={() => setSheet({ void: p })}>
+                        Void
+                      </Button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        )}
+
+        {can("delivery.read") && (
+          <Panel
+            title="Delivery"
+            actions={
+              can("delivery.write") &&
+              !openDelivery &&
+              ["CONFIRMED", "PROCESSING", "READY_FOR_DELIVERY"].includes(o.status) && (
+                <Button size="sm" icon={Truck} onClick={() => setSheet("delivery")}>
+                  Send for delivery
+                </Button>
+              )
+            }
+          >
+            {o.deliveries.length === 0 ? (
+              <p className="text-sm text-ink-muted">
+                {address ? `To: ${address}` : "No delivery address saved."}
+                {o.status === "NEW" && " Confirm the order to send it for delivery."}
+              </p>
+            ) : (
+              <ul className="-mx-5 -my-4 divide-y divide-line">
+                {o.deliveries.map((d) => (
+                  <li key={d.id} className="grid gap-2 px-5 py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="tabular font-medium text-ink">{d.delivery_number}</span>
+                      <Pill tone={DELIVERY_TONE[d.status]}>{DELIVERY_STATUS_LABEL[d.status] ?? d.status}</Pill>
+                      <span className="text-sm text-ink-muted">
+                        {d.method === "courier" ? d.courier_name : DELIVERY_METHOD_LABEL[d.method]}
+                        {d.assigned_to && ` · ${d.assigned_to.name}`}
+                        {d.scheduled_date && ` · ${d.scheduled_date}`}
+                      </span>
+                    </div>
+                    <p className="text-sm text-ink-muted">
+                      {addressText(d.delivery_address) || "No address"}
+                      {Number(d.cod_amount) > 0 && d.allowed_next.some((n) => n === "DELIVERED") && <span className="tabular"> · collect {formatMoney(d.cod_amount, d.order.currency)}</span>}
+                      {d.tracking_reference && ` · Tracking ${d.tracking_reference}`}
+                    </p>
+                    <ContactLine delivery={d} />
+                    {d.history.at(-1)?.note && <p className="text-sm text-ink-subtle">“{d.history.at(-1)?.note}”</p>}
+                    {can("delivery.write") && <DeliveryActions delivery={d} canRecordCash={can("payment.write")} onChanged={refresh} />}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Panel>
+        )}
+
         <Panel
           title="Invoice"
           actions={
@@ -271,10 +385,9 @@ export function OrderDetail() {
           )}
         </Panel>
 
-        {(address || o.notes) && (
-          <Panel title="Delivery and notes">
-            {address && <p className="text-ink">{address}</p>}
-            {o.notes && <p className={cx("whitespace-pre-wrap text-sm text-ink-muted", address && "mt-2")}>{o.notes}</p>}
+        {o.notes && (
+          <Panel title="Notes">
+            <p className="whitespace-pre-wrap text-sm text-ink-muted">{o.notes}</p>
           </Panel>
         )}
 
@@ -294,6 +407,21 @@ export function OrderDetail() {
         </Panel>
       </div>
 
+      {sheet === "delivery" && (
+        <Modal title="Send for delivery" onClose={() => setSheet(null)}>
+          <NewDeliveryForm order={o} onSaved={() => (setSheet(null), refresh())} onCancel={() => setSheet(null)} />
+        </Modal>
+      )}
+      {(sheet === "payment" || sheet === "refund") && (
+        <Modal title={sheet === "refund" ? "Record a refund" : "Record a payment"} onClose={() => setSheet(null)}>
+          <RecordPaymentForm order={o} refund={sheet === "refund"} onSaved={() => (setSheet(null), refresh())} onCancel={() => setSheet(null)} />
+        </Modal>
+      )}
+      {sheet && typeof sheet === "object" && (
+        <Modal title="Void this payment?" onClose={() => setSheet(null)}>
+          <VoidPaymentForm payment={sheet.void} onSaved={() => (setSheet(null), refresh())} onCancel={() => setSheet(null)} />
+        </Modal>
+      )}
       {asking?.kind === "status" && (
         <ReasonDialog
           title={`${STATUS_ACTION[asking.status]}?`}

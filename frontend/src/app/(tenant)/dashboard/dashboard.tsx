@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, MessagesSquare } from "lucide-react";
+import { Check, MessagesSquare, Truck } from "lucide-react";
 import Link from "next/link";
 
 import { useMe } from "@/components/tenant-shell";
@@ -159,6 +159,28 @@ function WaitingSummary() {
   );
 }
 
+function DeliveriesSummary({ mine }: { mine: boolean }) {
+  const view = mine ? "mine" : "today";
+  const due = useQuery({
+    queryKey: ["deliveries", view, "count"],
+    queryFn: () => api<{ items: unknown[] }>("tenant", "GET", `/api/v1/deliveries?view=${view}&limit=100`),
+  });
+  const count = due.data?.items.length ?? 0;
+  return (
+    <Link href="/deliveries" className="flex items-center gap-4 rounded-panel border border-line bg-surface px-5 py-4 transition-colors hover:border-line-strong">
+      <span className="grid size-11 place-items-center rounded-full bg-primary-soft text-primary">
+        <Truck className="size-5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-lg font-semibold text-ink">
+          {count === 0 ? "No deliveries due" : count === 1 ? "1 delivery to make" : `${count} deliveries to make`}
+        </span>
+        <span className="block text-sm text-ink-muted">{mine ? "Assigned to you" : "Due today or not yet scheduled"}</span>
+      </span>
+    </Link>
+  );
+}
+
 export function Dashboard() {
   const me = useMe(); // session checks and redirects live in TenantShell
   if (!me.data) return null;
@@ -179,6 +201,7 @@ export function Dashboard() {
       <SubscriptionNotice subscription={me.data.subscription} />
       <div className="grid gap-6">
         {canReadInbox && <WaitingSummary />}
+        {me.data.permissions.includes("delivery.read") && <DeliveriesSummary mine={me.data.roles.includes("DELIVERY")} />}
         {me.data.roles.some((r) => r === "OWNER" || r === "ADMIN") && <OwnerSetup />}
       </div>
     </div>

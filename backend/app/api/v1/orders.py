@@ -12,8 +12,9 @@ from sqlalchemy import and_, func, or_, select
 
 from app.api import pagination
 from app.api.deps import TenantContext, require
+from app.api.v1.fulfilment import DeliveryOut, PaymentOut, deliveries_out, payments_out
 from app.core.exceptions import NotFound
-from app.models import Customer, Invoice, InvoiceItem, Order, OrderStatusHistory
+from app.models import Customer, Delivery, Invoice, InvoiceItem, Order, OrderStatusHistory, Payment
 from app.models.sales import LEAD_SOURCES, ORDER_STATUSES, SOURCE_CHANNELS
 from app.schemas.auth import StrictModel
 from app.services import idempotency, invoices, orders
@@ -151,6 +152,8 @@ class OrderOut(OrderSummary):
     source_conversation_id: uuid.UUID | None
     history: list[StatusEvent]
     invoices: list[InvoiceSummary]
+    deliveries: list[DeliveryOut]  # empty without delivery.read
+    payments: list[PaymentOut]  # empty without payment.read; includes voided rows
     allowed_next: list[str]
     version: int
 
@@ -199,6 +202,27 @@ async def _order_out(ctx: TenantContext, order: Order) -> OrderOut:
             select(Invoice).where(Invoice.order_id == order.id).order_by(Invoice.created_at.desc())
         )
     ).scalars()
+    order_deliveries: list[Delivery] = []
+    if "delivery.read" in ctx.permissions:
+        order_deliveries = list(
+            (
+                await ctx.session.execute(
+                    select(Delivery).where(Delivery.order_id == order.id).order_by(Delivery.created_at.desc())
+                )
+            ).scalars()
+        )
+    order_payments: list[Payment] = []
+    if "payment.read" in ctx.permissions:
+        order_payments = list(
+            (
+                await ctx.session.execute(
+                    select(Payment).where(Payment.order_id == order.id).order_by(Payment.paid_at.desc())
+                )
+            ).scalars()
+        )
+    allowed = orders.TRANSITIONS.get(order.status, frozenset())
+    if await orders.open_delivery_for(ctx.session, order.id) is not None:
+        allowed = allowed - orders.DELIVERY_DRIVEN  # the order follows its open delivery
     return OrderOut(
         id=order.id,
         order_number=order.order_number,
@@ -250,7 +274,9 @@ async def _order_out(ctx: TenantContext, order: Order) -> OrderOut:
             )
             for v in order_invoices
         ],
-        allowed_next=sorted(orders.TRANSITIONS.get(order.status, frozenset())),
+        deliveries=await deliveries_out(ctx.session, order_deliveries, history=True),
+        payments=await payments_out(ctx.session, order_payments),
+        allowed_next=sorted(allowed),
         version=order.version,
     )
 

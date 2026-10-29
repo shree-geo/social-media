@@ -30,6 +30,7 @@ from app.models.customers import (
     CustomerTag,
     CustomerTagLink,
 )
+from app.models.fulfilment import Delivery, DeliveryStatusHistory, Payment
 from app.models.identity import (
     AuthToken,
     MembershipRole,
@@ -73,6 +74,8 @@ __all__ = [
     "CustomerNote",
     "CustomerTag",
     "CustomerTagLink",
+    "Delivery",
+    "DeliveryStatusHistory",
     "DocumentSequence",
     "IdempotencyKey",
     "Inventory",
@@ -87,6 +90,7 @@ __all__ = [
     "Order",
     "OrderItem",
     "OrderStatusHistory",
+    "Payment",
     "Permission",
     "Plan",
     "PlanFeature",
