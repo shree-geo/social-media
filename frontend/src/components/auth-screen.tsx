@@ -48,6 +48,9 @@ export function AuthScreen({ children, audience = "business" }: { children: Reac
             Need help logging in? Please <ReachUs linkClassName="underline hover:opacity-100" />. ·{" "}
             <Link href="/privacy" className="underline hover:opacity-100">
               Privacy policy
+            </Link> ·{" "}
+            <Link href="/terms" className="underline hover:opacity-100">
+              Terms
             </Link>
           </p>
         </div>

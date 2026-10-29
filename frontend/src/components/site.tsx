@@ -89,6 +89,7 @@ function SiteFooter() {
       title: "Legal",
       links: [
         { href: "/privacy", label: "Privacy policy" },
+        { href: "/terms", label: "Terms of service" },
         { href: "/data-deletion", label: "Data deletion" },
       ],
     },
