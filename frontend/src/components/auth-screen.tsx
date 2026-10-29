@@ -1,4 +1,5 @@
 import { MessageCircle, MessagesSquare, ShoppingBag, Truck, Wallet, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { brand } from "@/config/brand";
@@ -43,7 +44,10 @@ export function AuthScreen({ children, audience = "business" }: { children: Reac
             </ol>
           </div>
           <p className="hidden text-sm opacity-70 lg:block">
-            Need help logging in? Call us on {brand.supportPhone}.
+            Need help logging in? Call us on {brand.supportPhone}. ·{" "}
+            <Link href="/privacy" className="underline hover:opacity-100">
+              Privacy policy
+            </Link>
           </p>
         </div>
       </aside>

@@ -4,4 +4,6 @@ export const brand = {
   statement: "Every chat, every order, in one place.",
   statementNe: "हरेक च्याट, हरेक अर्डर, एकै ठाउँमा।",
   supportPhone: "+977 9800000000",
+  supportEmail: "support@myleadtoday.cloud",
+  website: "https://myleadtoday.cloud",
 } as const;
