@@ -10,7 +10,7 @@ import { z } from "zod";
 
 import { Alert, Button, Checkbox, Field, PageHeader, SelectField } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
-import type { Plan, TenantCreated } from "@/lib/platform";
+import { CYCLE_LABEL, type Plan, type TenantCreated } from "@/lib/platform";
 
 /** Today's date in the browser's own timezone, as YYYY-MM-DD for <input type="date">. */
 function localToday(): string {
@@ -46,13 +46,6 @@ const schema = z
   });
 
 type FormValues = z.infer<typeof schema>;
-
-const CYCLE_LABEL: Record<string, string> = {
-  monthly: "Monthly",
-  quarterly: "Every 3 months",
-  half_yearly: "Every 6 months",
-  yearly: "Yearly",
-};
 
 function Step({ number, title, description, children }: { number: number; title: string; description: string; children: ReactNode }) {
   return (
@@ -230,7 +223,9 @@ export function NewTenantForm() {
 
         <Step number={2} title="Package" description="The renewal date is worked out from the start date and how often they pay.">
           {plans.data && activePlans.length === 0 && (
-            <Alert tone="warning">No packages exist yet. A super admin needs to create one first.</Alert>
+            <Alert tone="warning">
+              No packages exist yet. A super admin needs to <Link href="/admin/plans/new" className="font-medium underline">create one</Link> first.
+            </Alert>
           )}
           <div className="grid gap-x-4 sm:grid-cols-2">
             <SelectField label="Package" error={errors.plan_id?.message} {...form.register("plan_id")}>

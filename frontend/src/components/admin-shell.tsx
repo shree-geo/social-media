@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Building2, LogOut, PlusCircle, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Building2, LogOut, Package, PlusCircle, ShieldCheck, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
@@ -13,11 +13,12 @@ import { ApiError, api, type PlatformMe } from "@/lib/api";
 const NAV: { href: string; label: string; icon: LucideIcon; exact: boolean }[] = [
   { href: "/admin/tenants", label: "Businesses", icon: Building2, exact: true },
   { href: "/admin/tenants/new", label: "Add a business", icon: PlusCircle, exact: true },
+  { href: "/admin/plans", label: "Packages", icon: Package, exact: false },
 ];
 
 function AdminNav() {
   const pathname = usePathname();
-  return NAV.map((item) => <AdminNavLink key={item.href} item={item} active={pathname === item.href} />);
+  return NAV.map((item) => <AdminNavLink key={item.href} item={item} active={item.exact ? pathname === item.href : pathname.startsWith(item.href)} />);
 }
 
 function AdminNavLink({ item, active }: { item: (typeof NAV)[number]; active: boolean }) {
