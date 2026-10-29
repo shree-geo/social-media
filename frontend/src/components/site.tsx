@@ -1,7 +1,8 @@
-import { Menu, MessageCircle } from "lucide-react";
+import { Menu } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
 import { ContactLine } from "@/components/site-contact";
 import { brand } from "@/config/brand";
 
@@ -21,9 +22,7 @@ export const MARIGOLD_BUTTON = `${BUTTON} bg-nav-marker text-nav hover:opacity-9
 function Logo() {
   return (
     <Link href="/" className="flex items-center gap-2 text-lg font-semibold text-ink">
-      <span className="grid size-8 place-items-center rounded-control bg-nav text-nav-ink">
-        <MessageCircle className="size-5" aria-hidden />
-      </span>
+      <BrandMark className="size-9" />
       {brand.name}
     </Link>
   );
@@ -99,7 +98,7 @@ function SiteFooter() {
       <div className="mx-auto grid max-w-6xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-[2fr_1fr_1fr_1fr]">
         <div>
           <p className="flex items-center gap-2 text-lg font-semibold">
-            <MessageCircle className="size-5" aria-hidden />
+            <BrandMark className="size-8 ring-1 ring-nav-line" />
             {brand.name}
           </p>
           <p className="mt-2 max-w-xs text-nav-ink-muted">{brand.statement}</p>

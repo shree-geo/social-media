@@ -1,11 +1,12 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Building2, LogOut, Package, PlusCircle, Settings, ShieldCheck, type LucideIcon } from "lucide-react";
+import { Building2, LogOut, Package, PlusCircle, Settings, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
 import { cx } from "@/components/ui";
 import { brand } from "@/config/brand";
 import { ApiError, api, type PlatformMe } from "@/lib/api";
@@ -70,7 +71,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
       <aside className="flex shrink-0 flex-col bg-admin-nav text-nav-ink lg:sticky lg:top-0 lg:h-dvh lg:w-64">
         <div className="flex items-center justify-between gap-3 px-4 py-4 lg:block lg:px-5 lg:pt-6">
           <p className="flex items-center gap-2 font-semibold">
-            <ShieldCheck className="size-5" aria-hidden />
+            <BrandMark className="size-8 ring-1 ring-nav-line" />
             {brand.name} admin
           </p>
           <button onClick={logout} className="grid size-10 place-items-center rounded-control lg:hidden" aria-label="Log out">

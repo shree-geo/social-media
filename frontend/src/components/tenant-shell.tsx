@@ -4,7 +4,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Home,
   LogOut,
-  MessageCircle,
   MessagesSquare,
   Menu,
   Package,
@@ -19,6 +18,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
 import { cx } from "@/components/ui";
 import { brand } from "@/config/brand";
 import { ApiError, api, type Me } from "@/lib/api";
@@ -144,7 +144,7 @@ export function TenantShell({ children }: { children: ReactNode }) {
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col overflow-hidden bg-nav text-nav-ink md:flex">
         <div className="px-4 pt-5 pb-6">
           <p className="flex items-center gap-2 text-sm font-semibold text-nav-ink-muted">
-            <MessageCircle className="size-5" aria-hidden />
+            <BrandMark className="size-7 ring-1 ring-nav-line" />
             {brand.name}
           </p>
           {me.data ? (

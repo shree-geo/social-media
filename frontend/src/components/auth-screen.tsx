@@ -1,7 +1,8 @@
-import { MessageCircle, MessagesSquare, ShoppingBag, Truck, Wallet, type LucideIcon } from "lucide-react";
+import { MessagesSquare, ShoppingBag, Truck, Wallet, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
 import { ReachUs } from "@/components/site-contact";
 import { brand } from "@/config/brand";
 
@@ -21,7 +22,7 @@ export function AuthScreen({ children, audience = "business" }: { children: Reac
         <div className="flex h-full flex-col justify-between gap-10 px-6 py-6 lg:px-12 lg:py-12">
           <div>
             <p className="flex items-center gap-2 text-lg font-semibold">
-              <MessageCircle className="size-6" aria-hidden />
+              <BrandMark className="size-9 ring-1 ring-nav-line" />
               {brand.name}
               {audience === "admin" && <span className="font-normal opacity-75">Admin</span>}
             </p>
