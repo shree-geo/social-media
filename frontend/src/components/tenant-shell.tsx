@@ -19,7 +19,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, useEffect, type ReactNode } from "react";
 
-import { DhakaPattern } from "@/components/dhaka-pattern";
 import { cx } from "@/components/ui";
 import { brand } from "@/config/brand";
 import { ApiError, api, type Me } from "@/lib/api";
@@ -159,8 +158,7 @@ export function TenantShell({ children }: { children: ReactNode }) {
             <NavLinks items={nav} variant="side" />
           </Suspense>
         </nav>
-        <DhakaPattern className="mt-auto h-14 w-full shrink-0 opacity-50" />
-        <div className="border-t border-nav-line px-4 py-4">
+        <div className="mt-auto border-t border-nav-line px-4 py-4">
           <p className="truncate text-sm font-medium text-nav-ink">{me.data?.full_name ?? "\u00a0"}</p>
           <p className="truncate text-xs text-nav-ink-muted">{me.data?.email ?? "\u00a0"}</p>
           <button

@@ -1,16 +1,22 @@
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, MessagesSquare, ShoppingBag, Truck, Wallet, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { DhakaPattern } from "@/components/dhaka-pattern";
 import { brand } from "@/config/brand";
 
-/** Login / password screens: brand panel with the weave pattern, form on the right (stacked on phones). */
+/** What the product does, in the order a sale happens. */
+const FLOW: { icon: LucideIcon; title: string; text: string }[] = [
+  { icon: MessagesSquare, title: "One inbox", text: "Facebook Messenger and WhatsApp chats together." },
+  { icon: ShoppingBag, title: "Chat to order", text: "Turn a conversation into an order and invoice." },
+  { icon: Wallet, title: "Payments", text: "Cash, eSewa, Khalti, bank transfer and COD." },
+  { icon: Truck, title: "Deliveries", text: "Send, track and collect cash on delivery." },
+];
+
+/** Login / password screens: brand panel with what the product does, form on the right (stacked on phones). */
 export function AuthScreen({ children, audience = "business" }: { children: ReactNode; audience?: "business" | "admin" }) {
   return (
     <main className="grid min-h-dvh grid-rows-[auto_1fr] lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)] lg:grid-rows-1">
-      <aside className="relative overflow-hidden bg-nav text-nav-ink">
-        <DhakaPattern className="absolute inset-y-0 right-0 h-full w-24 lg:w-24" />
-        <div className="relative flex h-full flex-col justify-between gap-8 px-6 py-6 pr-20 lg:px-12 lg:py-12 lg:pr-36">
+      <aside className="bg-nav text-nav-ink">
+        <div className="flex h-full flex-col justify-between gap-10 px-6 py-6 lg:px-12 lg:py-12">
           <div>
             <p className="flex items-center gap-2 text-lg font-semibold">
               <MessageCircle className="size-6" aria-hidden />
@@ -22,6 +28,19 @@ export function AuthScreen({ children, audience = "business" }: { children: Reac
           <div className="hidden lg:block">
             <p className="text-3xl leading-tight font-semibold">{brand.statement}</p>
             <p className="mt-3 text-xl opacity-80">{brand.statementNe}</p>
+            <ol className="mt-10 grid gap-5">
+              {FLOW.map(({ icon: Icon, title, text }) => (
+                <li key={title} className="flex items-start gap-4">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-control bg-nav-marker text-nav">
+                    <Icon className="size-5" aria-hidden />
+                  </span>
+                  <span>
+                    <span className="block font-semibold">{title}</span>
+                    <span className="block text-sm opacity-75">{text}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
           <p className="hidden text-sm opacity-70 lg:block">
             Need help logging in? Call us on {brand.supportPhone}.
