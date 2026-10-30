@@ -806,6 +806,53 @@ async def complete_whatsapp(
     return WhatsAppConnected(account.id, account.display_phone, account.display_name, account.name_status, coexistence)
 
 
+async def connect_whatsapp_with_token(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    waba_id: str,
+    phone_number_id: str,
+    token: str,
+    plan_id: uuid.UUID | None,
+) -> WhatsAppConnected:
+    """Operator path for a number that is already on the Cloud API (Meta's test number, or one set up
+    in WhatsApp Manager), using a system-user token instead of Embedded Signup's one-time code.
+
+    Runs the same steps as the wizard (token and WABA checks, plan limit, subscribe, encrypted
+    token) but never registers the number: registering sets a new two-step PIN, which would take
+    a number away from wherever it is used now.
+    """
+    setup, state = await start_setup(
+        session, tenant_id=tenant_id, user_id=user_id, provider="whatsapp", mode="new_number"
+    )
+    _set_temp_token(setup, token)
+    setup.steps_completed = ["token"]
+    try:
+        numbers = await graph.get(f"/{waba_id}/phone_numbers", token=token, fields="id,platform_type")
+    except graph.GraphError as exc:
+        raise _fail(setup, exc.short_code, f"Meta didn't accept the token for this WhatsApp account: {exc}") from None
+    phone = next((n for n in numbers.get("data") or [] if str(n.get("id")) == phone_number_id), None)
+    if phone is not None and str(phone.get("platform_type") or "").upper() != "CLOUD_API":
+        raise _fail(
+            setup,
+            "number_not_on_cloud_api",
+            "This number isn't active on the Cloud API yet. Connect it with the Connect WhatsApp wizard instead.",
+        )
+    return await complete_whatsapp(
+        session,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        setup_id=setup.id,
+        state=state,
+        code=None,
+        waba_id=waba_id,
+        phone_number_id=phone_number_id,
+        plan_id=plan_id,
+        request=RequestInfo(),
+    )
+
+
 async def record_cancel(
     session: AsyncSession, *, tenant_id: uuid.UUID, setup_id: uuid.UUID, step: str | None, error: str | None
 ) -> None:

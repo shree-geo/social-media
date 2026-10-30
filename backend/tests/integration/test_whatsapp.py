@@ -370,3 +370,60 @@ async def test_disconnect_unsubscribes_and_revokes(
             )
         ).scalar_one()
     assert active == 0
+
+
+async def test_operator_connects_a_cloud_api_number_with_a_token(
+    make_client: ClientFactory, platform_db: AsyncEngine, wa_graph: FakeWhatsAppGraph, jobs: Jobs
+) -> None:
+    """``app.cli connect-whatsapp``: Meta's test number has no Embedded Signup code, only a system-user token."""
+    from app import cli
+
+    admin = await _admin_client(make_client, platform_db)
+    created = await _create_tenant(admin, await _super_admin_plan(platform_db))
+    owner = await _owner_session(make_client, created)
+    email = str(created["owner_email"])
+
+    assert await cli._connect_whatsapp("nobody@example.com", wa_graph.waba, wa_graph.phone, BUSINESS_TOKEN) == 1
+    # Not on the Cloud API yet: refused, because registering would set a new PIN on someone's number.
+    assert await cli._connect_whatsapp(email, wa_graph.waba, wa_graph.phone, BUSINESS_TOKEN) == 1
+    assert wa_graph.waba not in wa_graph.subscribed and (await owner.get("/api/v1/channels")).json()["items"] == []
+
+    wa_graph.platform_type = "CLOUD_API"
+    assert await cli._connect_whatsapp(email, wa_graph.waba, wa_graph.phone, BUSINESS_TOKEN) == 0
+    assert wa_graph.waba in wa_graph.subscribed and wa_graph.registered_pins == []
+    card = (await owner.get("/api/v1/channels")).json()["items"][0]
+    assert (card["provider"], card["health_status"], card["display_phone"]) == (
+        "whatsapp",
+        "healthy",
+        "+977 980-0000000",
+    )
+
+    customer = f"97798{new_id().int % 10**8:08d}"
+    raw, headers = _webhook(
+        "messages",
+        {
+            "messaging_product": "whatsapp",
+            "metadata": {"phone_number_id": wa_graph.phone},
+            "contacts": [{"profile": {"name": "Test Sender"}, "wa_id": customer}],
+            "messages": [
+                {
+                    "from": customer,
+                    "id": "wamid.test1",
+                    "timestamp": str(int(datetime.now(UTC).timestamp())),
+                    "type": "text",
+                    "text": {"body": "hello"},
+                }
+            ],
+        },
+        wa_graph.waba,
+    )
+    hook = await make_client()
+    assert (await hook.post("/api/v1/webhooks/whatsapp", content=raw, headers=headers)).status_code == 200
+    assert await jobs.run_all() == ["processed"]
+    convo = (await owner.get("/api/v1/conversations")).json()["items"][0]
+    await owner.post(
+        f"/api/v1/conversations/{convo['id']}/messages",
+        json={"text": "Hi!"},
+        headers={"Idempotency-Key": f"k-{new_id().hex}"},
+    )
+    assert await jobs.run_all() == ["sent"] and wa_graph.sent[0]["token"] == BUSINESS_TOKEN

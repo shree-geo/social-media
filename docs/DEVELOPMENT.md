@@ -162,6 +162,22 @@ In the Meta app dashboard:
 
 Then **Channels → Connect WhatsApp**. Use a spare SIM that is not on WhatsApp for the new-number option. If registration fails because of an old two-step verification PIN, remove it in WhatsApp Manager and press *Try again* (the wizard resumes; it doesn't need Meta's window again).
 
+## Testing with Meta's WhatsApp test number
+
+Meta's free test number (WhatsApp → API Setup) can't go through the Connect WhatsApp wizard, so an operator connects it to a business from the command line:
+
+1. **WhatsApp → API Setup**: note the test number's *Phone number ID* and *WhatsApp Business Account ID*. Under *To*, add and verify up to 5 phones that will message it.
+2. **Business Settings → Users → System users**: create a system user, assign it the app and the test WhatsApp account, and generate a token with `whatsapp_business_management` and `whatsapp_business_messaging` (the 24-hour token on API Setup works too, but expires).
+3. Set the WhatsApp webhook (step 3 above) and subscribe to at least `messages`.
+4. Run, and paste the token when asked (it isn't echoed or kept in shell history):
+
+```bash
+docker compose exec backend python -m app.cli connect-whatsapp <owner-email> \
+  --waba-id <WhatsApp Business Account ID> --phone-number-id <Phone number ID>
+```
+
+It runs the wizard's checks (token is for our app with both permissions, the number belongs to that account, plan limit, not connected to another business), subscribes the app to the account's webhooks and stores the token encrypted. It only accepts numbers already active on the Cloud API and never registers them, because registering sets a new two-step PIN. Disconnect works from the Channels page as usual.
+
 ## Meta webhooks locally
 
 Meta must reach a public HTTPS URL. Use a tunnel (Cloudflare Tunnel or ngrok) to `http://localhost:8080` and configure the callback URLs from `ONBOARDING_AND_CHANNEL_SETUP.md` §2 in the Meta app dashboard.
