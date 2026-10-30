@@ -85,6 +85,54 @@ async def test_catalogue_variants_prices_stock_and_default_vat(
     assert duplicate.status_code == 409 and duplicate.json()["code"] == "sku_taken"
 
 
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+async def test_product_photo_and_website_link(make_client: ClientFactory, platform_db: AsyncEngine) -> None:
+    owner, _ = await _shop(make_client, platform_db)
+    created = await owner.post(
+        "/api/v1/products",
+        json={"name": "Sofa", "website_url": "https://shop.example.com/sofa", "variants": [{"price": "30000"}]},
+    )
+    assert created.status_code == 201, created.text
+    sofa = created.json()
+    assert (sofa["website_url"], sofa["photo_url"]) == ("https://shop.example.com/sofa", None)
+    bad_link = await owner.post(
+        "/api/v1/products", json={"name": "X", "website_url": "javascript:alert(1)", "variants": [{"price": "1"}]}
+    )
+    assert bad_link.status_code == 422
+
+    not_image = await owner.post(
+        f"/api/v1/products/{sofa['id']}/photo", files={"photo": ("a.png", b"hello", "image/png")}
+    )
+    assert not_image.json()["code"] == "invalid_photo"  # the bytes decide, not the file name or browser type
+
+    first = (
+        await owner.post(f"/api/v1/products/{sofa['id']}/photo", files={"photo": ("sofa.png", PNG, "image/png")})
+    ).json()["photo_url"]
+    photo = await owner.get(first)
+    assert photo.status_code == 200 and photo.headers["content-type"] == "image/png" and photo.content == PNG
+
+    second = (
+        await owner.post(f"/api/v1/products/{sofa['id']}/photo", files={"photo": ("s.png", PNG + b"!", "image/png")})
+    ).json()["photo_url"]
+    assert second != first and (await owner.get(first)).status_code == 404  # replaced, not added
+
+    unlinked = (await owner.patch(f"/api/v1/products/{sofa['id']}", json={"website_url": None})).json()
+    assert unlinked["website_url"] is None and unlinked["photo_url"] == second
+    removed = (await owner.delete(f"/api/v1/products/{sofa['id']}/photo")).json()
+    assert removed["photo_url"] is None
+
+    other, _ = await _shop(make_client, platform_db)
+    again = (
+        await owner.post(f"/api/v1/products/{sofa['id']}/photo", files={"photo": ("s.png", PNG, "image/png")})
+    ).json()["photo_url"]
+    assert (await other.get(again)).status_code == 404
+    assert (
+        await other.post(f"/api/v1/products/{sofa['id']}/photo", files={"photo": ("s.png", PNG)})
+    ).status_code == 404
+
+
 async def test_order_from_conversation_lifecycle_stock_and_invoice(
     make_client: ClientFactory,
     platform_db: AsyncEngine,

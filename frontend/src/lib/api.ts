@@ -42,15 +42,16 @@ async function send(
   extraHeaders: Record<string, string> = {},
 ): Promise<Response> {
   const headers: Record<string, string> = { Accept: "application/json", ...extraHeaders };
+  const isForm = body instanceof FormData; // file uploads: the browser sets the multipart boundary
   if (method !== "GET") {
     headers["X-CSRF-Token"] = await csrfToken();
-    headers["Content-Type"] = "application/json";
+    if (!isForm) headers["Content-Type"] = "application/json";
   }
   return fetch(path, {
     method,
     headers,
     credentials: "same-origin",
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : isForm ? body : JSON.stringify(body),
   });
 }
 

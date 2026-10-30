@@ -13,6 +13,8 @@ export type Product = {
   id: string;
   name: string;
   description: string | null;
+  website_url: string | null;
+  photo_url: string | null;
   unit: string;
   tax_rate_id: string | null;
   tax_rate: string | null;

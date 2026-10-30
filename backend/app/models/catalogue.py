@@ -50,10 +50,12 @@ class Product(UUIDPrimaryKey, TenantOwned, Timestamps, Base):
         ForeignKeyConstraint(["tenant_id", "tax_rate_id"], ["tax_rates.tenant_id", "tax_rates.id"]),
         Index("ix_products_tenant_id_is_active", "tenant_id", "is_active"),
         Index("ix_products_name_trgm", "name", postgresql_using="gin", postgresql_ops={"name": "gin_trgm_ops"}),
+        CheckConstraint("website_url ~ '^https?://' AND length(website_url) <= 500", name="website_url"),
     )
 
     name: Mapped[str]
     description: Mapped[str | None]
+    website_url: Mapped[str | None]  # the product's page on the business's own website
     category_id: Mapped[uuid.UUID | None]
     tax_rate_id: Mapped[uuid.UUID | None]
     unit: Mapped[str] = mapped_column(server_default=text("'pcs'"))

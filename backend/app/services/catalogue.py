@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError, Conflict, NotFound
@@ -15,13 +15,14 @@ from app.models import (
     Inventory,
     InventoryTransaction,
     Product,
+    ProductImage,
     ProductPrice,
     ProductVariant,
     TaxRate,
     Tenant,
     TenantSettings,
 )
-from app.services import audit, entitlements
+from app.services import audit, entitlements, storage
 from app.services.audit import RequestInfo
 
 
@@ -31,6 +32,24 @@ class NotEnoughStock(AppError):
 
 class InvalidTaxRate(AppError):
     status, code, title = 422, "invalid_tax_rate", "Unknown tax rate"
+
+
+class InvalidPhoto(AppError):
+    status, code, title = 422, "invalid_photo", "The photo must be a JPEG, PNG or WebP image up to 5 MB"
+
+
+MAX_PHOTO_BYTES = 5 * 1024 * 1024
+
+
+def photo_type(data: bytes) -> tuple[str, str] | None:
+    """(mime type, extension) from the file's first bytes; the browser's content type isn't trusted."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg", "jpg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png", "png"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp", "webp"
+    return None
 
 
 @dataclass(frozen=True)
@@ -161,6 +180,7 @@ async def create_product(
     track_inventory: bool,
     variants: list[VariantInput],
     request: RequestInfo,
+    website_url: str | None = None,
 ) -> Product:
     await entitlements.require_capacity(session, tenant_id=tenant_id, plan_id=plan_id, key="max_products")
     tenant = await session.get(Tenant, tenant_id)
@@ -173,6 +193,7 @@ async def create_product(
         tenant_id=tenant_id,
         name=name.strip(),
         description=description,
+        website_url=website_url,
         unit=unit,
         tax_rate_id=tax_rate_id or await _default_tax_rate(session, tenant_id),
         track_inventory=track_inventory,
@@ -201,6 +222,53 @@ async def create_product(
         request=request,
     )
     return product
+
+
+async def set_photo(
+    session: AsyncSession, *, tenant_id: uuid.UUID, product: Product, data: bytes, user_id: uuid.UUID
+) -> ProductImage:
+    """Store ``data`` as the product's photo, replacing the previous one."""
+    kind = photo_type(data)
+    if kind is None or len(data) > MAX_PHOTO_BYTES:
+        raise InvalidPhoto()
+    mime_type, extension = kind
+    saved = await storage.put(
+        session,
+        tenant_id=tenant_id,
+        data=data,
+        content_type=mime_type,
+        purpose="product_image",
+        key_prefix=f"products/{product.id}",
+        extension=extension,
+    )
+    await session.execute(delete(ProductImage).where(ProductImage.product_id == product.id))
+    image = ProductImage(tenant_id=tenant_id, product_id=product.id, object_id=saved.object_id)
+    session.add(image)
+    await session.flush()
+    await audit.record(
+        session,
+        action="PRODUCT_PHOTO_SET",
+        actor_type="user",
+        actor_id=user_id,
+        tenant_id=tenant_id,
+        resource_type="product",
+        resource_id=product.id,
+        after={"object_id": str(saved.object_id), "size_bytes": len(data)},
+    )
+    return image
+
+
+async def remove_photo(session: AsyncSession, *, tenant_id: uuid.UUID, product: Product, user_id: uuid.UUID) -> None:
+    await session.execute(delete(ProductImage).where(ProductImage.product_id == product.id))
+    await audit.record(
+        session,
+        action="PRODUCT_PHOTO_REMOVED",
+        actor_type="user",
+        actor_id=user_id,
+        tenant_id=tenant_id,
+        resource_type="product",
+        resource_id=product.id,
+    )
 
 
 async def update_variant_price(

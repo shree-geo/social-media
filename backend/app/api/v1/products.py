@@ -5,16 +5,16 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response, UploadFile
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, or_, select
 
 from app.api import pagination
 from app.api.deps import TenantContext, require
 from app.core.exceptions import NotFound
-from app.models import Inventory, Product, ProductPrice, ProductVariant, TaxRate, Tenant
+from app.models import Inventory, Product, ProductImage, ProductPrice, ProductVariant, StoredObject, TaxRate, Tenant
 from app.schemas.auth import StrictModel
-from app.services import audit, catalogue
+from app.services import audit, catalogue, storage
 
 router = APIRouter(tags=["products"])
 
@@ -23,6 +23,7 @@ Writer = Annotated[TenantContext, Depends(require("product.write", write=True))]
 
 Money = Annotated[Decimal, Field(ge=0, max_digits=14, decimal_places=2)]
 Qty = Annotated[Decimal, Field(max_digits=12, decimal_places=3)]
+WebsiteUrl = Annotated[str, Field(max_length=500, pattern=r"^https?://\S+$")]
 
 
 class VariantIn(StrictModel):
@@ -36,6 +37,7 @@ class VariantIn(StrictModel):
 class ProductCreate(StrictModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
+    website_url: WebsiteUrl | None = None
     unit: str = Field(default="pcs", max_length=20)
     tax_rate_id: uuid.UUID | None = None
     track_inventory: bool = True
@@ -45,6 +47,7 @@ class ProductCreate(StrictModel):
 class ProductUpdate(StrictModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
+    website_url: WebsiteUrl | None = None
     unit: str | None = Field(default=None, max_length=20)
     tax_rate_id: uuid.UUID | None = None
     track_inventory: bool | None = None
@@ -79,6 +82,8 @@ class ProductOut(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None
+    website_url: str | None
+    photo_url: str | None
     unit: str
     tax_rate_id: uuid.UUID | None
     tax_rate: Decimal | None
@@ -139,11 +144,22 @@ async def _products_out(ctx: TenantContext, products: list[Product]) -> list[Pro
     rates = dict(
         (await ctx.session.execute(select(TaxRate.id, TaxRate.rate).where(TaxRate.tenant_id == ctx.tenant_id))).all()
     )
+    photos = dict(
+        (
+            await ctx.session.execute(
+                select(ProductImage.product_id, ProductImage.id)
+                .where(ProductImage.product_id.in_(ids))
+                .order_by(ProductImage.created_at)  # newest wins
+            )
+        ).all()
+    )
     return [
         ProductOut(
             id=p.id,
             name=p.name,
             description=p.description,
+            website_url=p.website_url,
+            photo_url=f"/api/v1/products/{p.id}/photo/{photos[p.id]}" if p.id in photos else None,
             unit=p.unit,
             tax_rate_id=p.tax_rate_id,
             tax_rate=rates.get(p.tax_rate_id) if p.tax_rate_id else None,
@@ -218,6 +234,7 @@ async def create_product(body: ProductCreate, ctx: Writer) -> ProductOut:
         user_id=ctx.user_id,
         name=body.name,
         description=body.description,
+        website_url=body.website_url,
         unit=body.unit,
         tax_rate_id=body.tax_rate_id,
         track_inventory=body.track_inventory,
@@ -263,6 +280,38 @@ async def update_product(product_id: uuid.UUID, body: ProductUpdate, ctx: Writer
     )
     await ctx.session.refresh(product)
     return (await _products_out(ctx, [product]))[0]
+
+
+@router.post("/products/{product_id}/photo")
+async def upload_photo(product_id: uuid.UUID, photo: UploadFile, ctx: Writer) -> ProductOut:
+    product = await _product(ctx, product_id)
+    data = await photo.read(catalogue.MAX_PHOTO_BYTES + 1)
+    await catalogue.set_photo(ctx.session, tenant_id=ctx.tenant_id, product=product, data=data, user_id=ctx.user_id)
+    return await get_product(product_id, ctx)
+
+
+@router.delete("/products/{product_id}/photo")
+async def remove_photo(product_id: uuid.UUID, ctx: Writer) -> ProductOut:
+    product = await _product(ctx, product_id)
+    await catalogue.remove_photo(ctx.session, tenant_id=ctx.tenant_id, product=product, user_id=ctx.user_id)
+    await ctx.session.flush()
+    return await get_product(product_id, ctx)
+
+
+@router.get("/products/{product_id}/photo/{image_id}")
+async def product_photo(product_id: uuid.UUID, image_id: uuid.UUID, ctx: Reader) -> Response:
+    image = await ctx.session.get(ProductImage, image_id)
+    if image is None or image.product_id != product_id:
+        raise NotFound()
+    stored = await ctx.session.get(StoredObject, image.object_id)
+    if stored is None:
+        raise NotFound()
+    return Response(
+        content=await storage.get(stored),
+        media_type=stored.mime_type,
+        # A new photo gets a new id, so this URL's bytes never change.
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
 
 
 @router.post("/products/{product_id}/variants", status_code=201)

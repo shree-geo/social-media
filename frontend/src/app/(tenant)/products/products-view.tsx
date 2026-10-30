@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, Minus, Package, Plus, Search, Trash2, X } from "lucide-react";
-import { useDeferredValue, useState, type FormEvent } from "react";
+import { ChevronDown, ExternalLink, ImagePlus, Minus, Package, Plus, Search, Trash2, X } from "lucide-react";
+import { useDeferredValue, useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { useMe } from "@/components/tenant-shell";
 import { Alert, Button, Checkbox, EmptyState, Field, PageHeader, Pill, SelectField, cx } from "@/components/ui";
@@ -21,6 +21,73 @@ function stockState(v: Variant): { label: string; tone: "danger" | "attention" |
 
 type VariantDraft = { name: string; sku: string; price: string; opening_stock: string };
 
+const PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"];
+const MAX_PHOTO_MB = 5;
+
+function photoProblem(file: File): string | null {
+  if (!PHOTO_TYPES.includes(file.type)) return "Choose a JPEG, PNG or WebP photo.";
+  if (file.size > MAX_PHOTO_MB * 1024 * 1024) return `The photo must be ${MAX_PHOTO_MB} MB or smaller.`;
+  return null;
+}
+
+function uploadPhoto(productId: string, file: File) {
+  const form = new FormData();
+  form.append("photo", file);
+  return api<Product>("tenant", "POST", `/api/v1/products/${productId}/photo`, form);
+}
+
+/** "" → null; "myshop.com/chair" → "https://myshop.com/chair"; undefined when it can't be a link. */
+function websiteLink(value: string): string | null | undefined {
+  const v = value.trim();
+  if (!v) return null;
+  const url = /^https?:\/\//i.test(v) ? v : `https://${v}`;
+  return /^https?:\/\/[^\s/]+\.[^\s]+$/i.test(url) && url.length <= 500 ? url : undefined;
+}
+
+class PhotoUploadFailed extends Error {}
+
+function ProductThumb({ src, size = "md" }: { src: string | null; size?: "md" | "lg" }) {
+  const box = size === "lg" ? "size-20" : "size-10";
+  return src ? (
+    // eslint-disable-next-line @next/next/no-img-element -- private, cookie-authenticated API image
+    <img src={src} alt="" className={cx(box, "shrink-0 rounded-control bg-sunken object-cover")} />
+  ) : (
+    <span className={cx(box, "grid shrink-0 place-items-center rounded-control bg-primary-soft text-primary")}>
+      <Package className={size === "lg" ? "size-8" : "size-5"} aria-hidden />
+    </span>
+  );
+}
+
+function PhotoPicker({ src, onPick, onRemove, busy }: { src: string | null; onPick: (file: File) => void; onRemove?: () => void; busy?: boolean }) {
+  return (
+    <div className="flex items-center gap-3">
+      <ProductThumb src={src} size="lg" />
+      <div className="flex flex-wrap gap-2">
+        <label className={cx("inline-flex cursor-pointer items-center gap-1.5 rounded-control border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:bg-sunken focus-within:ring-2 focus-within:ring-primary/25", busy && "pointer-events-none opacity-60")}>
+          <ImagePlus className="size-4" aria-hidden />
+          {src ? "Change photo" : "Add photo"}
+          <input
+            type="file"
+            accept={PHOTO_TYPES.join(",")}
+            className="sr-only"
+            disabled={busy}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = ""; // picking the same file again still fires
+              if (file) onPick(file);
+            }}
+          />
+        </label>
+        {src && onRemove && (
+          <Button type="button" size="sm" variant="ghost" icon={Trash2} onClick={onRemove} disabled={busy}>
+            Remove
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AddProduct({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
   const taxRates = useQuery({ queryKey: ["tax-rates"], queryFn: () => api<TaxRate[]>("tenant", "GET", "/api/v1/tax-rates") });
@@ -29,35 +96,58 @@ function AddProduct({ onClose }: { onClose: () => void }) {
   const [taxRateId, setTaxRateId] = useState("");
   const [trackStock, setTrackStock] = useState(true);
   const [variants, setVariants] = useState<VariantDraft[]>([{ name: "", sku: "", price: "", opening_stock: "" }]);
+  const [website, setWebsite] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const preview = useMemo(() => (photo ? URL.createObjectURL(photo) : null), [photo]);
+  useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
+  // Set once the product exists, so a failed photo upload is retried without creating it twice.
+  const [created, setCreated] = useState<Product | null>(null);
   const [error, setError] = useState<string | null>(null);
   const multiple = variants.length > 1;
 
   const save = useMutation({
-    mutationFn: () =>
-      api<Product>("tenant", "POST", "/api/v1/products", {
-        name,
-        unit,
-        tax_rate_id: taxRateId || null,
-        track_inventory: trackStock,
-        variants: variants.map((v) => ({
-          name: v.name || "Default",
-          sku: v.sku || null,
-          price: v.price,
-          opening_stock: trackStock ? v.opening_stock || "0" : "0",
-        })),
-      }),
+    mutationFn: async () => {
+      const product = created ?? (await createProduct());
+      if (!created) {
+        setCreated(product);
+        queryClient.invalidateQueries({ queryKey: ["products"] });
+      }
+      if (photo) {
+        await uploadPhoto(product.id, photo).catch((e: unknown) => {
+          const reason = e instanceof ApiError ? ` (${e.message})` : "";
+          throw new PhotoUploadFailed(`The product is saved, but the photo didn't upload${reason}. Try again, or close and add it later.`);
+        });
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       onClose();
     },
-    onError: (e) => setError(e instanceof ApiError ? e.message : "Couldn't save the product."),
+    onError: (e) => setError(e instanceof PhotoUploadFailed || e instanceof ApiError ? e.message : "Couldn't save the product."),
   });
+
+  function createProduct() {
+    return api<Product>("tenant", "POST", "/api/v1/products", {
+      name,
+      website_url: websiteLink(website),
+      unit,
+      tax_rate_id: taxRateId || null,
+      track_inventory: trackStock,
+      variants: variants.map((v) => ({
+        name: v.name || "Default",
+        sku: v.sku || null,
+        price: v.price,
+        opening_stock: trackStock ? v.opening_stock || "0" : "0",
+      })),
+    });
+  }
 
   function submit(event: FormEvent) {
     event.preventDefault();
     setError(null);
     if (!name.trim()) return setError("Enter the product name.");
     if (variants.some((v) => v.price === "" || Number(v.price) < 0)) return setError("Enter a price for every option.");
+    if (websiteLink(website) === undefined) return setError("Enter a website link like myshop.com/office-chair, or leave it empty.");
     save.mutate();
   }
 
@@ -75,71 +165,99 @@ function AddProduct({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         {error && <Alert tone="error">{error}</Alert>}
-        <Field label="Product name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Office chair" autoFocus />
-        <div className="grid gap-x-4 sm:grid-cols-2">
-          <SelectField label="Sold by" value={unit} onChange={(e) => setUnit(e.target.value)}>
-            {UNITS.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </SelectField>
-          <SelectField label="VAT" value={taxRateId} onChange={(e) => setTaxRateId(e.target.value)}>
-            <option value="">Business default</option>
-            {taxRates.data?.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </SelectField>
-        </div>
-        <Checkbox label="Track stock for this product" hint="Stock goes down when an order is confirmed, and back up if it's cancelled." checked={trackStock} onChange={(e) => setTrackStock(e.target.checked)} />
-
-        <fieldset className="mt-2">
-          <legend className="mb-2 text-sm font-medium text-ink">{multiple ? "Options (colour, size …)" : "Price and stock"}</legend>
-          <div className="space-y-3">
-            {variants.map((v, i) => (
-              <div key={i} className="grid grid-cols-2 gap-2 rounded-control bg-sunken/60 p-3 sm:grid-cols-[1.4fr_1fr_1fr_1fr_auto] sm:items-end">
-                {multiple && (
-                  <label className="col-span-2 text-sm sm:col-span-1">
-                    <span className="mb-1 block text-ink-muted">Option</span>
-                    <input value={v.name} onChange={(e) => update(i, { name: e.target.value })} placeholder="Black" className="w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-base" />
-                  </label>
-                )}
-                <label className="text-sm">
-                  <span className="mb-1 block text-ink-muted">Price (Rs.)</span>
-                  <input value={v.price} onChange={(e) => update(i, { price: e.target.value })} inputMode="decimal" placeholder="4500" className="tabular w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-base" />
-                </label>
-                {trackStock && (
-                  <label className="text-sm">
-                    <span className="mb-1 block text-ink-muted">In stock now</span>
-                    <input value={v.opening_stock} onChange={(e) => update(i, { opening_stock: e.target.value })} inputMode="decimal" placeholder="0" className="tabular w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-base" />
-                  </label>
-                )}
-                <label className="text-sm">
-                  <span className="mb-1 block text-ink-muted">Code (optional)</span>
-                  <input value={v.sku} onChange={(e) => update(i, { sku: e.target.value })} placeholder="CH-BLK" className="w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-base" />
-                </label>
-                {multiple && (
-                  <button type="button" onClick={() => setVariants((vs) => vs.filter((_, j) => j !== i))} className="grid size-10 place-items-center rounded-control text-ink-muted hover:bg-surface" aria-label="Remove option">
-                    <Trash2 className="size-4" aria-hidden />
-                  </button>
-                )}
-              </div>
-            ))}
+        <fieldset disabled={created !== null} className="min-w-0">
+          <Field label="Product name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Office chair" autoFocus />
+          <div className="grid gap-x-4 sm:grid-cols-2">
+            <SelectField label="Sold by" value={unit} onChange={(e) => setUnit(e.target.value)}>
+              {UNITS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </SelectField>
+            <SelectField label="VAT" value={taxRateId} onChange={(e) => setTaxRateId(e.target.value)}>
+              <option value="">Business default</option>
+              {taxRates.data?.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+            </SelectField>
           </div>
-          <button type="button" onClick={() => setVariants((vs) => [...vs, { name: "", sku: "", price: "", opening_stock: "" }])} className="mt-2 inline-flex items-center gap-1.5 rounded-control px-2 py-1.5 text-sm font-medium text-primary hover:bg-primary-soft">
-            <Plus className="size-4" aria-hidden />
-            {multiple ? "Add another option" : "This product comes in options (colour, size …)"}
-          </button>
+          <Checkbox label="Track stock for this product" hint="Stock goes down when an order is confirmed, and back up if it's cancelled." checked={trackStock} onChange={(e) => setTrackStock(e.target.checked)} />
+
+          <fieldset className="mt-2">
+            <legend className="mb-2 text-sm font-medium text-ink">{multiple ? "Options (colour, size …)" : "Price and stock"}</legend>
+            <div className="space-y-3">
+              {variants.map((v, i) => (
+                <div key={i} className="grid grid-cols-2 gap-2 rounded-control bg-sunken/60 p-3 sm:grid-cols-[1.4fr_1fr_1fr_1fr_auto] sm:items-end">
+                  {multiple && (
+                    <label className="col-span-2 text-sm sm:col-span-1">
+                      <span className="mb-1 block text-ink-muted">Option</span>
+                      <input value={v.name} onChange={(e) => update(i, { name: e.target.value })} placeholder="Black" className="w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-base" />
+                    </label>
+                  )}
+                  <label className="text-sm">
+                    <span className="mb-1 block text-ink-muted">Price (Rs.)</span>
+                    <input value={v.price} onChange={(e) => update(i, { price: e.target.value })} inputMode="decimal" placeholder="4500" className="tabular w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-base" />
+                  </label>
+                  {trackStock && (
+                    <label className="text-sm">
+                      <span className="mb-1 block text-ink-muted">In stock now</span>
+                      <input value={v.opening_stock} onChange={(e) => update(i, { opening_stock: e.target.value })} inputMode="decimal" placeholder="0" className="tabular w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-base" />
+                    </label>
+                  )}
+                  <label className="text-sm">
+                    <span className="mb-1 block text-ink-muted">Code (optional)</span>
+                    <input value={v.sku} onChange={(e) => update(i, { sku: e.target.value })} placeholder="CH-BLK" className="w-full rounded-control border border-line-strong bg-surface px-3 py-2 text-base" />
+                  </label>
+                  {multiple && (
+                    <button type="button" onClick={() => setVariants((vs) => vs.filter((_, j) => j !== i))} className="grid size-10 place-items-center rounded-control text-ink-muted hover:bg-surface" aria-label="Remove option">
+                      <Trash2 className="size-4" aria-hidden />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={() => setVariants((vs) => [...vs, { name: "", sku: "", price: "", opening_stock: "" }])} className="mt-2 inline-flex items-center gap-1.5 rounded-control px-2 py-1.5 text-sm font-medium text-primary hover:bg-primary-soft">
+              <Plus className="size-4" aria-hidden />
+              {multiple ? "Add another option" : "This product comes in options (colour, size …)"}
+            </button>
+          </fieldset>
+
+          <div className="mt-4">
+            <Field
+              label="Website link (optional)"
+              hint="This product's page on your website, so your team can share it in chats."
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              inputMode="url"
+              autoComplete="url"
+              placeholder="myshop.com/office-chair"
+            />
+          </div>
         </fieldset>
+
+        <div className="mt-2">
+          <p className="mb-2 text-sm font-medium text-ink">Photo (optional)</p>
+          <PhotoPicker
+            src={preview}
+            busy={save.isPending}
+            onPick={(file) => {
+              const problem = photoProblem(file);
+              setError(problem);
+              if (!problem) setPhoto(file);
+            }}
+            onRemove={() => setPhoto(null)}
+          />
+        </div>
 
         <div className="mt-6 flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onClose}>
             Cancel
           </Button>
           <Button type="submit" loading={save.isPending}>
-            Save product
+            {created ? "Upload photo again" : "Save product"}
           </Button>
         </div>
       </form>
@@ -217,6 +335,78 @@ function VariantRow({ product, variant, canEdit }: { product: Product; variant: 
   );
 }
 
+function ProductExtras({ product, canEdit }: { product: Product; canEdit: boolean }) {
+  const queryClient = useQueryClient();
+  const [website, setWebsite] = useState(product.website_url ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const refresh = () => {
+    setError(null);
+    queryClient.invalidateQueries({ queryKey: ["products"] });
+  };
+  const onError = (e: unknown) => setError(e instanceof ApiError ? e.message : "Couldn't save.");
+  const setPhoto = useMutation({ mutationFn: (file: File) => uploadPhoto(product.id, file), onSuccess: refresh, onError });
+  const removePhoto = useMutation({ mutationFn: () => api("tenant", "DELETE", `/api/v1/products/${product.id}/photo`), onSuccess: refresh, onError });
+  const saveLink = useMutation({
+    mutationFn: (url: string | null) => api<Product>("tenant", "PATCH", `/api/v1/products/${product.id}`, { website_url: url }),
+    onSuccess: (saved) => {
+      setWebsite(saved.website_url ?? "");
+      refresh();
+    },
+    onError,
+  });
+  const link = product.website_url && (
+    <a href={product.website_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+      View on website
+      <ExternalLink className="size-3.5" aria-hidden />
+    </a>
+  );
+
+  if (!canEdit) return link ? <li className="border-t border-line px-4 py-3">{link}</li> : null;
+  return (
+    <li className="grid gap-4 border-t border-line px-4 py-3 sm:grid-cols-[auto_1fr] sm:items-end">
+      <PhotoPicker
+        src={product.photo_url}
+        busy={setPhoto.isPending || removePhoto.isPending}
+        onPick={(file) => {
+          const problem = photoProblem(file);
+          if (problem) setError(problem);
+          else setPhoto.mutate(file);
+        }}
+        onRemove={() => removePhoto.mutate()}
+      />
+      <div className="text-sm">
+        <label htmlFor={`website-${product.id}`} className="mb-1 flex items-center justify-between gap-2 text-ink-muted">
+          Website link (optional) {link}
+        </label>
+        <span className="flex gap-1">
+          <input
+            id={`website-${product.id}`}
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            inputMode="url"
+            placeholder="myshop.com/office-chair"
+            className="min-w-0 flex-1 rounded-control border border-line-strong bg-surface px-2 py-1.5"
+          />
+          {website.trim() !== (product.website_url ?? "") && (
+            <Button
+              size="sm"
+              loading={saveLink.isPending}
+              onClick={() => {
+                const url = websiteLink(website);
+                if (url === undefined) setError("Enter a website link like myshop.com/office-chair, or leave it empty.");
+                else saveLink.mutate(url);
+              }}
+            >
+              Save
+            </Button>
+          )}
+        </span>
+      </div>
+      {error && <p className="text-sm text-danger sm:col-span-2">{error}</p>}
+    </li>
+  );
+}
+
 function ProductRow({ product, canEdit }: { product: Product; canEdit: boolean }) {
   const [open, setOpen] = useState(false);
   const prices = product.variants.map((v) => Number(v.price ?? 0));
@@ -227,9 +417,7 @@ function ProductRow({ product, canEdit }: { product: Product; canEdit: boolean }
   return (
     <li className="border-b border-line last:border-b-0">
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-sunken/60">
-        <span className="grid size-10 shrink-0 place-items-center rounded-control bg-primary-soft text-primary">
-          <Package className="size-5" aria-hidden />
-        </span>
+        <ProductThumb src={product.photo_url} />
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             <span className="truncate font-medium text-ink">{product.name}</span>
@@ -246,6 +434,7 @@ function ProductRow({ product, canEdit }: { product: Product; canEdit: boolean }
       </button>
       {open && (
         <ul className="bg-paper/60">
+          <ProductExtras product={product} canEdit={canEdit} />
           {product.variants.map((v) => (
             <VariantRow key={v.id} product={product} variant={v} canEdit={canEdit} />
           ))}

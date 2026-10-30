@@ -842,6 +842,7 @@ erDiagram
         uuid tenant_id FK
         text name
         text description
+        text website_url "product page on the business's site"
         uuid category_id FK
         uuid tax_rate_id FK
         text unit "pcs kg m set"
@@ -913,13 +914,14 @@ erDiagram
 ```
 
 - Every product has **at least one variant** (`is_default`); orders always reference a variant. Products without options just have one default variant — this keeps order/stock logic uniform.
+- The app keeps **one photo per product** for now: uploading replaces the `product_images` row (the old file stays in storage). The API checks the file's first bytes (JPEG, PNG or WebP, up to 5 MB) and serves it from `/api/v1/products/{id}/photo/{image_id}`; a new photo gets a new URL, so it can be cached forever.
 - `inventory.quantity_on_hand` is a cache of `SUM(inventory_transactions.quantity_delta)`, updated in the same transaction (row locked `FOR UPDATE`).
 
 | Table | Constraint / index |
 |---|---|
 | `product_variants` | `UNIQUE (tenant_id, sku)`; `UNIQUE (product_id) WHERE is_default` |
 | `product_prices` | current price: `UNIQUE (variant_id, currency) WHERE effective_to IS NULL`; `CHECK (amount >= 0)` |
-| `products` | `ix (tenant_id, is_active)`; GIN trigram on `name` (search / future AI matching) |
+| `products` | `ix (tenant_id, is_active)`; GIN trigram on `name` (search / future AI matching); `CHECK (website_url ~ '^https?://' AND length <= 500)` |
 | `inventory` | `UNIQUE (variant_id)` |
 | `inventory_transactions` | `ix (tenant_id, variant_id, created_at DESC)`; `CHECK (quantity_delta <> 0)` |
 | `tax_rates` | `UNIQUE (tenant_id) WHERE is_default`; `CHECK (rate BETWEEN 0 AND 100)` |
