@@ -144,6 +144,84 @@ class TenantListItem(BaseModel):
     created_at: datetime
 
 
+class TenantUpdate(StrictModel):
+    business_name: str | None = Field(default=None, min_length=1, max_length=200)
+    legal_name: str | None = Field(default=None, max_length=200)
+    email: EmailStr | None = None
+    phone: str | None = Field(default=None, max_length=30)
+    address: dict[str, str] | None = None
+    tax_number: str | None = Field(default=None, max_length=30)
+
+
+class SubscriptionUpdate(StrictModel):
+    plan_id: uuid.UUID | None = None
+    billing_cycle: BillingCycle | None = None
+    expiry_date: date | None = None
+    grace_period_days: int | None = Field(default=None, ge=0, le=60)
+    discount_amount: Money | None = Field(default=None, ge=0, max_digits=14, decimal_places=2)
+    discount_reason: str | None = Field(default=None, max_length=500)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class SubscriptionDetail(SubscriptionOut):
+    plan_name: str
+    plan_code: str
+    effective_status: str
+    days_remaining: int
+
+
+class SubscriptionPaymentOut(BaseModel):
+    id: uuid.UUID
+    receipt_number: str
+    amount: Money
+    currency: str
+    payment_method: str
+    transaction_reference: str | None
+    paid_at: datetime
+    period_start: date
+    period_end: date
+    notes: str | None
+    voided_at: datetime | None
+
+
+class SubscriptionEventOut(BaseModel):
+    id: uuid.UUID
+    event_type: str
+    from_status: str | None
+    to_status: str | None
+    from_plan_name: str | None
+    to_plan_name: str | None
+    from_expiry_date: date | None
+    to_expiry_date: date | None
+    reason: str | None
+    actor_type: str
+    created_at: datetime
+
+
+class TenantOwnerOut(BaseModel):
+    full_name: str
+    email: str
+    phone: str | None
+
+
+class TenantDetail(BaseModel):
+    tenant_id: uuid.UUID
+    business_name: str
+    legal_name: str | None
+    email: str | None
+    phone: str | None
+    address: dict[str, str] | None
+    tax_number: str | None
+    vat_registered: bool
+    timezone: str
+    status: str
+    created_at: datetime
+    owner: TenantOwnerOut | None
+    subscription: SubscriptionDetail | None
+    payments: list[SubscriptionPaymentOut]
+    history: list[SubscriptionEventOut]
+
+
 class RenewalOut(BaseModel):
     subscription: SubscriptionOut
     receipt_number: str

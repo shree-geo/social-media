@@ -98,6 +98,7 @@ export function TenantsList() {
                 <th scope="col" className="px-4 py-3 font-medium">Status</th>
                 <th scope="col" className="px-4 py-3 font-medium">Renews</th>
                 <th scope="col" className="px-4 py-3 text-right font-medium">Time left</th>
+                <th scope="col" className="px-4 py-3"><span className="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody>
@@ -106,7 +107,9 @@ export function TenantsList() {
                 return (
                   <tr key={t.tenant_id} className="border-b border-line last:border-b-0">
                     <td className="px-4 py-3">
-                      <p className="font-medium text-ink">{t.business_name}</p>
+                      <Link href={`/admin/tenants/${t.tenant_id}`} className="font-medium text-primary hover:underline">
+                        {t.business_name}
+                      </Link>
                       <p className="text-xs text-ink-subtle">Joined {new Date(t.created_at).toLocaleDateString(undefined, { dateStyle: "medium" })}</p>
                     </td>
                     <td className="px-4 py-3 text-ink-muted">{t.plan_code?.replace(/^PLAN_/, "").replace(/_/g, " ").toLowerCase().replace(/^\w/, (m) => m.toUpperCase()) ?? "None"}</td>
@@ -119,12 +122,20 @@ export function TenantsList() {
                     <td className={cx("tabular px-4 py-3 text-right", left.urgent ? "font-semibold text-attention-ink" : "text-ink-muted")}>
                       {left.text}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <Link
+                        href={`/admin/tenants/${t.tenant_id}`}
+                        className="inline-flex min-h-9 items-center rounded-control border border-line-strong px-3 text-sm font-medium text-ink hover:bg-sunken"
+                      >
+                        Manage
+                      </Link>
+                    </td>
                   </tr>
                 );
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-ink-muted">
+                  <td colSpan={6} className="px-4 py-8 text-center text-ink-muted">
                     No businesses in this list.
                   </td>
                 </tr>

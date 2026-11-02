@@ -327,3 +327,85 @@ async def test_daily_job_persists_time_based_transitions(make_client: ClientFact
         ).scalar()
     assert status == "EXPIRED"
     assert events == 1
+
+
+async def test_admin_extends_expired_subscription_without_payment(
+    make_client: ClientFactory, platform_db: AsyncEngine
+) -> None:
+    admin = await _admin_client(make_client, platform_db)
+    created = await _create_tenant(
+        admin, await _super_admin_plan(platform_db), start=date.today() - timedelta(days=730), payment=False
+    )
+    owner = await _owner_session(make_client, created)
+    sub = created["subscription"]
+    assert isinstance(sub, dict)
+    assert sub["status"] == "EXPIRED"
+
+    new_expiry = (date.today() + timedelta(days=30)).isoformat()
+    extended = await admin.patch(
+        f"/api/v1/platform/subscriptions/{sub['id']}", json={"expiry_date": new_expiry, "reason": "Goodwill month"}
+    )
+    assert extended.status_code == 200, extended.text
+    assert extended.json()["status"] == "ACTIVE"
+    assert extended.json()["expiry_date"] == new_expiry
+    assert (await owner.get("/api/v1/auth/me")).json()["subscription"]["status"] == "ACTIVE"
+
+    before_start = await admin.patch(f"/api/v1/platform/subscriptions/{sub['id']}", json={"expiry_date": "2000-01-01"})
+    assert before_start.status_code == 409
+
+    detail = (await admin.get(f"/api/v1/platform/tenants/{created['tenant_id']}")).json()
+    assert detail["subscription"]["effective_status"] == "ACTIVE"
+    assert detail["subscription"]["days_remaining"] == 30
+    assert detail["owner"]["email"] == created["owner_email"]
+    dates_event = next(h for h in detail["history"] if h["event_type"] == "dates_changed")
+    assert dates_event["from_status"] == "EXPIRED" and dates_event["reason"] == "Goodwill month"
+    assert dates_event["to_expiry_date"] == new_expiry
+
+
+async def test_admin_changes_package_and_schedule(make_client: ClientFactory, platform_db: AsyncEngine) -> None:
+    admin = await _admin_client(make_client, platform_db)
+    created = await _create_tenant(admin, await _super_admin_plan(platform_db))
+    sub = created["subscription"]
+    assert isinstance(sub, dict)
+
+    other = await _super_admin_plan(platform_db)
+    async with platform_db.begin() as conn:
+        await conn.execute(
+            text("INSERT INTO plan_prices (id, plan_id, billing_cycle, amount) VALUES (:id, :p, 'monthly', 2500)"),
+            {"id": new_id(), "p": other},
+        )
+
+    missing_price = await admin.patch(
+        f"/api/v1/platform/subscriptions/{sub['id']}", json={"plan_id": str(other), "billing_cycle": "quarterly"}
+    )
+    assert missing_price.status_code != 200
+
+    changed = await admin.patch(
+        f"/api/v1/platform/subscriptions/{sub['id']}",
+        json={"plan_id": str(other), "billing_cycle": "monthly", "grace_period_days": 14},
+    )
+    assert changed.status_code == 200, changed.text
+    body = changed.json()
+    assert body["plan_id"] == str(other)
+    assert body["billing_cycle"] == "monthly"
+    assert body["price_amount"] == "2500.00"
+    assert body["grace_period_days"] == 14
+    assert body["expiry_date"] == sub["expiry_date"]  # the paid period is kept
+
+    detail = (await admin.get(f"/api/v1/platform/tenants/{created['tenant_id']}")).json()
+    assert any(h["event_type"] == "plan_changed" for h in detail["history"])
+    assert len(detail["payments"]) == 1
+
+
+async def test_admin_edits_business_details(make_client: ClientFactory, platform_db: AsyncEngine) -> None:
+    admin = await _admin_client(make_client, platform_db)
+    created = await _create_tenant(admin, await _super_admin_plan(platform_db))
+    edited = await admin.patch(
+        f"/api/v1/platform/tenants/{created['tenant_id']}",
+        json={"business_name": "Renamed Traders", "phone": "+977 9800000000", "tax_number": None},
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["business_name"] == "Renamed Traders"
+    assert edited.json()["phone"] == "+977 9800000000"
+    assert edited.json()["tax_number"] is None
+    assert (await admin.get(f"/api/v1/platform/tenants/{new_id()}")).status_code == 404

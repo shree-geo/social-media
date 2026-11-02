@@ -444,6 +444,157 @@ async def change_status(
     return sub
 
 
+@dataclass(frozen=True)
+class SubscriptionChanges:
+    """Admin edits to a current subscription. ``None`` = leave as is."""
+
+    plan_id: uuid.UUID | None = None
+    billing_cycle: str | None = None
+    expiry_date: date | None = None
+    grace_period_days: int | None = None
+    discount_amount: Decimal | None = None
+    discount_reason: str | None = None
+    reason: str | None = None
+
+
+async def update_subscription(
+    session: AsyncSession,
+    *,
+    subscription_id: uuid.UUID,
+    changes: SubscriptionChanges,
+    actor_id: uuid.UUID,
+    request: RequestInfo,
+) -> Subscription:
+    """Change the package or payment schedule, move the expiry date (free extension or correction),
+    grace days or discount. No payment is recorded; use ``renew_subscription`` for that."""
+    sub, tenant = await _locked_subscription(session, subscription_id)
+    if sub.status == "CANCELLED":
+        raise InvalidTransition()
+    today = tenant_today(tenant.timezone)
+    before = {
+        "plan_id": str(sub.plan_id),
+        "billing_cycle": sub.billing_cycle,
+        "price_amount": str(sub.price_amount),
+        "expiry_date": sub.expiry_date.isoformat(),
+        "grace_period_days": sub.grace_period_days,
+        "discount_amount": str(sub.discount_amount),
+        "status": sub.status,
+    }
+    from_status, from_plan, from_expiry = sub.status, sub.plan_id, sub.expiry_date
+
+    plan_id = changes.plan_id or sub.plan_id
+    cycle = changes.billing_cycle or sub.billing_cycle
+    plan_changed = plan_id != sub.plan_id or cycle != sub.billing_cycle
+    if plan_changed:
+        price = await current_price(session, plan_id, cycle, today)
+        sub.plan_id, sub.billing_cycle = plan_id, cycle
+        sub.plan_price_id, sub.price_amount, sub.currency = price.id, price.amount, price.currency
+
+    if changes.grace_period_days is not None:
+        sub.grace_period_days = changes.grace_period_days
+    if changes.discount_amount is not None:
+        sub.discount_amount = changes.discount_amount
+        sub.discount_reason = changes.discount_reason
+
+    dates_changed = changes.expiry_date is not None and changes.expiry_date != sub.expiry_date
+    if dates_changed:
+        assert changes.expiry_date is not None
+        if changes.expiry_date < sub.start_date:
+            raise InvalidTransition("The expiry date can't be before the start date.")
+        sub.expiry_date = changes.expiry_date
+        if sub.status == "TRIAL":
+            sub.trial_ends_at = changes.expiry_date
+
+    # Dates or grace days decide ACTIVE / GRACE / EXPIRED again. A manual suspension stays.
+    if sub.status not in ("SUSPENDED", "TRIAL"):
+        sub.status = effective_status(
+            "ACTIVE",
+            trial_ends_at=None,
+            expiry_date=sub.expiry_date,
+            grace_period_days=sub.grace_period_days,
+            today=today,
+        )
+    elif sub.status == "TRIAL":
+        sub.status = effective_status(
+            "TRIAL",
+            trial_ends_at=sub.trial_ends_at,
+            expiry_date=sub.expiry_date,
+            grace_period_days=sub.grace_period_days,
+            today=today,
+        )
+
+    if plan_changed:
+        await _history(
+            session, sub, "plan_changed", actor_id, from_status=from_status, from_plan=from_plan, reason=changes.reason
+        )
+    if dates_changed:
+        await _history(
+            session,
+            sub,
+            "dates_changed",
+            actor_id,
+            from_status=from_status,
+            from_expiry=from_expiry,
+            reason=changes.reason,
+        )
+    if not plan_changed and not dates_changed and sub.status != from_status:
+        await _history(session, sub, "status_changed", actor_id, from_status=from_status, reason=changes.reason)
+
+    await audit.record(
+        session,
+        action="SUBSCRIPTION_UPDATED",
+        actor_type="platform_user",
+        actor_id=actor_id,
+        tenant_id=sub.tenant_id,
+        resource_type="subscription",
+        resource_id=sub.id,
+        before=before,
+        after={
+            "plan_id": str(sub.plan_id),
+            "billing_cycle": sub.billing_cycle,
+            "price_amount": str(sub.price_amount),
+            "expiry_date": sub.expiry_date.isoformat(),
+            "grace_period_days": sub.grace_period_days,
+            "discount_amount": str(sub.discount_amount),
+            "status": sub.status,
+            "reason": changes.reason,
+        },
+        request=request,
+    )
+    return sub
+
+
+TENANT_EDITABLE = ("business_name", "legal_name", "email", "phone", "address", "tax_number")
+
+
+async def update_tenant(
+    session: AsyncSession, *, tenant_id: uuid.UUID, values: dict[str, object], actor_id: uuid.UUID, request: RequestInfo
+) -> Tenant:
+    """Edit the business's contact details. Only keys in ``values`` change."""
+    tenant = await session.get(Tenant, tenant_id, with_for_update=True)
+    if tenant is None or tenant.deleted_at is not None:
+        raise NotFound()
+    before = {k: getattr(tenant, k) for k in values if k in TENANT_EDITABLE}
+    for key, value in values.items():
+        if key == "business_name" and not value:
+            continue  # required; an empty value means "leave as is"
+        if key in TENANT_EDITABLE:
+            setattr(tenant, key, value)
+    await audit.record(
+        session,
+        action="TENANT_UPDATED",
+        actor_type="platform_user",
+        actor_id=actor_id,
+        tenant_id=tenant.id,
+        resource_type="tenant",
+        resource_id=tenant.id,
+        before=before,
+        after={k: getattr(tenant, k) for k in before},
+        request=request,
+    )
+    return tenant
+
+
 async def recompute_statuses(session: AsyncSession, now: datetime | None = None) -> int:
     """Daily job: persist time-based transitions (TRIAL/ACTIVE → GRACE → EXPIRED). Returns rows changed."""
     rows = await session.execute(

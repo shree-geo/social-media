@@ -11,7 +11,19 @@ from sqlalchemy.orm import aliased
 from app.api.deps import PLATFORM_ADMINS, PLATFORM_ALL, PlatformContext, require_platform_role
 from app.core.config import get_settings
 from app.core.exceptions import NotFound
-from app.models import MembershipRole, Plan, PlanFeature, PlanPrice, Role, Subscription, Tenant, TenantMembership, User
+from app.models import (
+    MembershipRole,
+    Plan,
+    PlanFeature,
+    PlanPrice,
+    Role,
+    Subscription,
+    SubscriptionHistory,
+    SubscriptionPayment,
+    Tenant,
+    TenantMembership,
+    User,
+)
 from app.schemas.auth import StrictModel
 from app.schemas.platform import (
     LoginDetailsOut,
@@ -21,10 +33,17 @@ from app.schemas.platform import (
     PlanOut,
     PlanPriceOut,
     RenewalOut,
+    SubscriptionDetail,
+    SubscriptionEventOut,
     SubscriptionOut,
+    SubscriptionPaymentOut,
+    SubscriptionUpdate,
     TenantCreate,
     TenantCreated,
+    TenantDetail,
     TenantListItem,
+    TenantOwnerOut,
+    TenantUpdate,
 )
 from app.services import onboarding, users
 from app.services.login_messages import share_message
@@ -229,9 +248,8 @@ async def list_tenants(
     return items
 
 
-@router.post("/tenants/{tenant_id}/owner/reset-login")
-async def reset_owner_login(tenant_id: uuid.UUID, ctx: Admin) -> LoginDetailsOut:
-    owner = (
+async def _owner_membership(ctx: PlatformContext, tenant_id: uuid.UUID) -> TenantMembership | None:
+    return (
         await ctx.session.execute(
             select(TenantMembership)
             .join(MembershipRole, MembershipRole.membership_id == TenantMembership.id)
@@ -241,6 +259,125 @@ async def reset_owner_login(tenant_id: uuid.UUID, ctx: Admin) -> LoginDetailsOut
             .limit(1)
         )
     ).scalar_one_or_none()
+
+
+async def _tenant_detail(ctx: PlatformContext, tenant: Tenant) -> TenantDetail:
+    session = ctx.session
+    membership = await _owner_membership(ctx, tenant.id)
+    owner_user = await session.get(User, membership.user_id) if membership else None
+    sub = (
+        await session.execute(
+            select(Subscription).where(Subscription.tenant_id == tenant.id, Subscription.status != "CANCELLED")
+        )
+    ).scalar_one_or_none()
+    plan_names = {p.id: p for p in (await session.execute(select(Plan))).scalars()}
+
+    subscription = None
+    payments: list[SubscriptionPaymentOut] = []
+    history: list[SubscriptionEventOut] = []
+    if sub is not None:
+        today = tenant_today(tenant.timezone)
+        plan = plan_names[sub.plan_id]
+        subscription = SubscriptionDetail(
+            **_subscription_out(sub).model_dump(),
+            plan_name=plan.name,
+            plan_code=plan.code,
+            effective_status=effective_status(
+                sub.status,
+                trial_ends_at=sub.trial_ends_at,
+                expiry_date=sub.expiry_date,
+                grace_period_days=sub.grace_period_days,
+                today=today,
+            ),
+            days_remaining=(sub.expiry_date - today).days,
+        )
+        payments = [
+            SubscriptionPaymentOut.model_validate(p, from_attributes=True)
+            for p in (
+                await session.execute(
+                    select(SubscriptionPayment)
+                    .where(SubscriptionPayment.subscription_id == sub.id)
+                    .order_by(SubscriptionPayment.paid_at.desc())
+                )
+            ).scalars()
+        ]
+
+        def name(plan_id: uuid.UUID | None) -> str | None:
+            return plan_names[plan_id].name if plan_id in plan_names else None
+
+        history = [
+            SubscriptionEventOut(
+                id=h.id,
+                event_type=h.event_type,
+                from_status=h.from_status,
+                to_status=h.to_status,
+                from_plan_name=name(h.from_plan_id),
+                to_plan_name=name(h.to_plan_id),
+                from_expiry_date=h.from_expiry_date,
+                to_expiry_date=h.to_expiry_date,
+                reason=h.reason,
+                actor_type=h.actor_type,
+                created_at=h.created_at,
+            )
+            for h in (
+                await session.execute(
+                    select(SubscriptionHistory)
+                    .where(SubscriptionHistory.subscription_id == sub.id)
+                    .order_by(SubscriptionHistory.created_at.desc())
+                    .limit(100)
+                )
+            ).scalars()
+        ]
+
+    return TenantDetail(
+        tenant_id=tenant.id,
+        business_name=tenant.business_name,
+        legal_name=tenant.legal_name,
+        email=tenant.email,
+        phone=tenant.phone,
+        address=tenant.address,
+        tax_number=tenant.tax_number,
+        vat_registered=tenant.vat_registered,
+        timezone=tenant.timezone,
+        status=tenant.status,
+        created_at=tenant.created_at,
+        owner=TenantOwnerOut(full_name=owner_user.full_name, email=owner_user.email, phone=owner_user.phone)
+        if owner_user
+        else None,
+        subscription=subscription,
+        payments=payments,
+        history=history,
+    )
+
+
+async def _get_tenant(ctx: PlatformContext, tenant_id: uuid.UUID) -> Tenant:
+    tenant = await ctx.session.get(Tenant, tenant_id)
+    if tenant is None or tenant.deleted_at is not None:
+        raise NotFound()
+    return tenant
+
+
+@router.get("/tenants/{tenant_id}")
+async def get_tenant(tenant_id: uuid.UUID, ctx: AnyStaff) -> TenantDetail:
+    return await _tenant_detail(ctx, await _get_tenant(ctx, tenant_id))
+
+
+@router.patch("/tenants/{tenant_id}")
+async def update_tenant(tenant_id: uuid.UUID, body: TenantUpdate, ctx: Admin) -> TenantDetail:
+    tenant = await onboarding.update_tenant(
+        ctx.session,
+        tenant_id=tenant_id,
+        values=body.model_dump(exclude_unset=True),
+        actor_id=ctx.user_id,
+        request=ctx.request,
+    )
+    await ctx.session.flush()
+    return await _tenant_detail(ctx, tenant)
+
+
+@router.post("/tenants/{tenant_id}/owner/reset-login")
+async def reset_owner_login(tenant_id: uuid.UUID, ctx: Admin) -> LoginDetailsOut:
+    owner = await _owner_membership(ctx, tenant_id)
     if owner is None:
         raise NotFound()
     details = await users.reset_login(
@@ -267,6 +404,26 @@ async def change_subscription_status(subscription_id: uuid.UUID, body: StatusCha
         subscription_id=subscription_id,
         action=body.action,
         reason=body.reason,
+        actor_id=ctx.user_id,
+        request=ctx.request,
+    )
+    return _subscription_out(sub)
+
+
+@router.patch("/subscriptions/{subscription_id}")
+async def update_subscription(subscription_id: uuid.UUID, body: SubscriptionUpdate, ctx: Admin) -> SubscriptionOut:
+    sub = await onboarding.update_subscription(
+        ctx.session,
+        subscription_id=subscription_id,
+        changes=onboarding.SubscriptionChanges(
+            plan_id=body.plan_id,
+            billing_cycle=body.billing_cycle,
+            expiry_date=body.expiry_date,
+            grace_period_days=body.grace_period_days,
+            discount_amount=body.discount_amount,
+            discount_reason=body.discount_reason,
+            reason=body.reason,
+        ),
         actor_id=ctx.user_id,
         request=ctx.request,
     )
