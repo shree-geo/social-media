@@ -18,6 +18,28 @@ export type ReportTotals = {
   new_orders: number;
   new_customers: number;
   messages_in: number;
+  new_leads: number;
+};
+
+export type LeadStats = {
+  created: number;
+  open_now: number;
+  won: number;
+  lost: number;
+  win_rate: number | null;
+  won_value: string;
+  avg_days_to_win: number | null;
+  lost_reasons: Record<string, number>;
+  staff: {
+    user_id: string | null;
+    full_name: string;
+    open: number;
+    created: number;
+    won: number;
+    lost: number;
+    won_value: string;
+    overdue_followups: number;
+  }[];
 };
 
 export type Dashboard = {
@@ -26,10 +48,10 @@ export type Dashboard = {
   totals: ReportTotals;
   previous: ReportTotals;
   series: { start: string; sales: string; orders: number }[];
-  channels: { channel: string; messages_in: number; conversations: number; orders: number; sales: string }[];
+  channels: { channel: string; messages_in: number; conversations: number; leads: number; orders: number; sales: string }[];
   lead_sources: { lead_source: string | null; orders: number; sales: string }[];
   orders_by_status: Record<string, number>;
-  funnel: { conversations: number; converted_conversations: number; orders: number; sales: string };
+  funnel: { conversations: number; leads: number; converted_conversations: number; orders: number; sales: string };
   snapshot: {
     open_orders: number;
     outstanding: string;
@@ -41,6 +63,7 @@ export type Dashboard = {
     delivered_in_period: number;
   };
   buyers: { total: number; returning: number };
+  leads: LeadStats;
 };
 
 const compact = new Intl.NumberFormat("en-IN", { notation: "compact", maximumFractionDigits: 1 });

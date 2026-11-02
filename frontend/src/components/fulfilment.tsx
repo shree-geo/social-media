@@ -25,10 +25,10 @@ import {
 
 const errorText = (err: unknown) => (err instanceof ApiError ? err.message : "That didn't work. Check your connection and try again.");
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({ title, onClose, children, wide = false }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
   return (
     <div className="fixed inset-0 z-50 grid items-end bg-black/40 sm:place-items-center sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
-      <div className="max-h-[92dvh] w-full overflow-y-auto rounded-t-panel bg-surface p-5 shadow-xl sm:max-w-md sm:rounded-panel">
+      <div className={cx("max-h-[92dvh] w-full overflow-y-auto rounded-t-panel bg-surface p-5 shadow-xl sm:rounded-panel", wide ? "sm:max-w-xl" : "sm:max-w-md")}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <h2 className="text-lg font-semibold text-ink">{title}</h2>
           <button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-control text-ink-muted hover:bg-sunken" aria-label="Close">

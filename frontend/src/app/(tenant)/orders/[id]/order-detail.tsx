@@ -153,6 +153,14 @@ export function OrderDetail() {
             {o.lead_source && ` · found you via ${LEAD_LABEL[o.lead_source] ?? o.lead_source}`}
           </p>
         </div>
+        {o.lead && (
+          <Link
+            href={`/leads/${o.lead.id}`}
+            className="inline-flex min-h-9 items-center gap-2 rounded-control border border-line-strong bg-surface px-3 text-sm font-medium text-ink hover:bg-sunken"
+          >
+            From lead {o.lead.lead_number}
+          </Link>
+        )}
         {o.source_conversation_id && (
           <Link
             href={`/inbox/${o.source_conversation_id}`}

@@ -8,6 +8,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cx } from "@/components/ui";
 import { api } from "@/lib/api";
 import { PERIODS, change, compactMoney, compactNumber, type Dashboard, type Period } from "@/lib/reports";
+import { LOST_REASON_LABEL } from "@/lib/leads";
 import { LEAD_LABEL, SOURCE_LABEL, STATUS_LABEL, formatMoney } from "@/lib/sales";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -275,6 +276,7 @@ function Channels({ data }: { data: Dashboard }) {
             <th className="pb-2 font-medium">Channel</th>
             <th className="pb-2 text-right font-medium">Messages</th>
             <th className="hidden pb-2 text-right font-medium sm:table-cell">Chats</th>
+            <th className="pb-2 text-right font-medium">Leads</th>
             <th className="pb-2 text-right font-medium">Orders</th>
             <th className="pb-2 pl-3 font-medium sm:pl-4">Sales</th>
           </tr>
@@ -285,6 +287,7 @@ function Channels({ data }: { data: Dashboard }) {
               <td className="py-2.5 font-medium text-ink">{SOURCE_LABEL[c.channel] ?? c.channel}</td>
               <td className="py-2.5 text-right text-ink">{c.messages_in ? compactNumber(c.messages_in) : "–"}</td>
               <td className="hidden py-2.5 text-right text-ink sm:table-cell">{c.conversations || "–"}</td>
+              <td className="py-2.5 text-right text-ink">{c.leads || "–"}</td>
               <td className="py-2.5 text-right text-ink">{c.orders}</td>
               <td className="w-2/5 py-2.5 pl-3 sm:pl-4">
                 <div className="flex items-center gap-2">
@@ -309,6 +312,11 @@ function Funnel({ data }: { data: Dashboard }) {
   const rate = f.conversations ? Math.round((f.converted_conversations / f.conversations) * 100) : 0;
   const steps = [
     { label: "Chats with customers", value: f.conversations, display: compactNumber(f.conversations) },
+    {
+      label: "Chats that became leads",
+      value: f.leads,
+      display: `${compactNumber(f.leads)} · ${f.conversations ? Math.round((f.leads / f.conversations) * 100) : 0}%`,
+    },
     {
       label: "Chats that became orders",
       value: f.converted_conversations,
@@ -336,6 +344,86 @@ function Funnel({ data }: { data: Dashboard }) {
         Sales from chats <span className="tabular float-right font-semibold text-ink">{formatMoney(f.sales, data.currency)}</span>
       </p>
     </div>
+  );
+}
+
+/* Leads ------------------------------------------------------------------------------------- */
+
+function LeadsSection({ data, against }: { data: Dashboard; against: string }) {
+  const l = data.leads;
+  const reasons = Object.entries(l.lost_reasons);
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <Tile label="New leads" value={compactNumber(data.totals.new_leads)} href="/leads">
+          <Delta current={data.totals.new_leads} previous={data.previous.new_leads} against={against} />
+        </Tile>
+        <Tile label="Win rate" value={l.win_rate === null ? "–" : `${Math.round(l.win_rate * 100)}%`} href="/leads">
+          <p className="mt-1 text-xs text-ink-muted">
+            {l.won} won · {l.lost} lost in this period
+          </p>
+        </Tile>
+        <Tile label="Value won" value={compactMoney(l.won_value, data.currency)}>
+          <p className="mt-1 text-xs text-ink-muted">Confirmed orders that came from leads</p>
+        </Tile>
+        <Tile label="Open leads" value={compactNumber(l.open_now)} href="/leads">
+          <p className="mt-1 text-xs text-ink-muted">
+            {l.avg_days_to_win === null
+              ? "Right now"
+              : `Right now · a win takes ${l.avg_days_to_win < 1 ? "under a day" : `${l.avg_days_to_win} days`} on average`}
+          </p>
+        </Tile>
+      </div>
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[3fr_2fr]">
+        <Panel title="Team" description="Leads each person looks after">
+          {l.staff.length === 0 ? (
+            <p className="text-sm text-ink-muted">No leads yet. Create one from a chat with “Create lead”.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[30rem] text-sm">
+                <thead className="text-left text-ink-muted">
+                  <tr>
+                    <th className="pb-2 font-medium">Person</th>
+                    <th className="pb-2 text-right font-medium">Open</th>
+                    <th className="pb-2 text-right font-medium">Won</th>
+                    <th className="pb-2 text-right font-medium">Lost</th>
+                    <th className="pb-2 text-right font-medium">Win rate</th>
+                    <th className="pb-2 text-right font-medium">Value won</th>
+                    <th className="pb-2 text-right font-medium">Overdue</th>
+                  </tr>
+                </thead>
+                <tbody className="tabular">
+                  {l.staff.map((s) => {
+                    const closed = s.won + s.lost;
+                    return (
+                      <tr key={s.user_id ?? "none"} className="border-t border-line">
+                        <td className={cx("py-2.5 font-medium", s.user_id ? "text-ink" : "text-ink-muted")}>{s.full_name}</td>
+                        <td className="py-2.5 text-right text-ink">{s.open}</td>
+                        <td className="py-2.5 text-right text-ink">{s.won}</td>
+                        <td className="py-2.5 text-right text-ink">{s.lost}</td>
+                        <td className="py-2.5 text-right text-ink">{closed ? `${Math.round((s.won / closed) * 100)}%` : "–"}</td>
+                        <td className="py-2.5 text-right text-ink">{compactMoney(s.won_value, data.currency)}</td>
+                        <td className={cx("py-2.5 text-right", s.overdue_followups ? "font-semibold text-danger" : "text-ink-muted")}>
+                          {s.overdue_followups || "–"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
+        <Panel title="Why leads were lost" description="Leads marked lost in this period">
+          <BarList
+            empty="No lost leads in this period."
+            rows={reasons
+              .sort((a, b) => b[1] - a[1])
+              .map(([reason, n]) => ({ key: reason, label: LOST_REASON_LABEL[reason] ?? reason, value: n, display: String(n) }))}
+          />
+        </Panel>
+      </div>
+    </>
   );
 }
 
@@ -425,6 +513,8 @@ export function BusinessReport() {
           </div>
 
           <SalesPanel data={data} />
+
+          <LeadsSection data={data} against={against} />
 
           <div className="grid min-w-0 gap-6 lg:grid-cols-[3fr_2fr]">
             <Panel title="Channel performance" description="Which channel brings in business">

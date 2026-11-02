@@ -15,9 +15,10 @@ from app.api.deps import TenantContext, require
 from app.api.v1.fulfilment import DeliveryOut, PaymentOut, deliveries_out, payments_out
 from app.core.exceptions import NotFound
 from app.models import Customer, Delivery, Invoice, InvoiceItem, Order, OrderStatusHistory, Payment
+from app.models import Lead as LeadModel
 from app.models.sales import LEAD_SOURCES, ORDER_STATUSES, SOURCE_CHANNELS
 from app.schemas.auth import StrictModel
-from app.services import idempotency, invoices, orders
+from app.services import idempotency, invoices, orders, realtime
 from app.workers.queue import enqueue
 
 router = APIRouter(tags=["orders"])
@@ -53,6 +54,7 @@ class Address(StrictModel):
 class OrderCreate(StrictModel):
     conversation_id: uuid.UUID | None = None  # "Create order" from a chat: customer and channel come from it
     customer_id: uuid.UUID | None = None
+    lead_id: uuid.UUID | None = None  # converting a lead: customer and chat come from it; the lead becomes WON
     source_channel: Source | None = None
     lead_source: Lead | None = None
     items: list[ItemIn] = Field(min_length=1, max_length=100)
@@ -62,8 +64,8 @@ class OrderCreate(StrictModel):
 
     @model_validator(mode="after")
     def _who(self) -> "OrderCreate":
-        if not self.conversation_id and not self.customer_id:
-            raise ValueError("conversation_id or customer_id is required")
+        if not self.conversation_id and not self.customer_id and not self.lead_id:
+            raise ValueError("conversation_id, customer_id or lead_id is required")
         return self
 
 
@@ -150,6 +152,7 @@ class OrderOut(OrderSummary):
     delivery_address: dict[str, Any] | None
     notes: str | None
     source_conversation_id: uuid.UUID | None
+    lead: dict[str, Any] | None  # the lead this order was converted from
     history: list[StatusEvent]
     invoices: list[InvoiceSummary]
     deliveries: list[DeliveryOut]  # empty without delivery.read
@@ -220,6 +223,9 @@ async def _order_out(ctx: TenantContext, order: Order) -> OrderOut:
                 )
             ).scalars()
         )
+    lead = (
+        await ctx.session.execute(select(LeadModel.id, LeadModel.lead_number).where(LeadModel.won_order_id == order.id))
+    ).first()
     allowed = orders.TRANSITIONS.get(order.status, frozenset())
     if await orders.open_delivery_for(ctx.session, order.id) is not None:
         allowed = allowed - orders.DELIVERY_DRIVEN  # the order follows its open delivery
@@ -254,6 +260,7 @@ async def _order_out(ctx: TenantContext, order: Order) -> OrderOut:
         delivery_address=order.delivery_address,
         notes=order.notes,
         source_conversation_id=order.source_conversation_id,
+        lead={"id": lead[0], "lead_number": lead[1]} if lead else None,
         history=[
             StatusEvent(
                 from_status=h.from_status,
@@ -345,6 +352,7 @@ async def list_orders(
 async def create_order(
     body: OrderCreate,
     ctx: OrderWriter,
+    background: BackgroundTasks,
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> OrderOut | JSONResponse:
     async def action() -> OrderOut:
@@ -361,10 +369,13 @@ async def create_order(
             shipping_fee=body.shipping_fee,
             delivery_address=body.delivery_address.model_dump(exclude_none=True) if body.delivery_address else None,
             notes=body.notes,
+            lead_id=body.lead_id,
             request=ctx.request,
         )
         await ctx.session.flush()
         await ctx.session.refresh(order)
+        if body.lead_id:
+            background.add_task(realtime.publish, ctx.tenant_id, "lead.updated", lead_id=body.lead_id)
         return await _order_out(ctx, order)
 
     result = await idempotency.run(

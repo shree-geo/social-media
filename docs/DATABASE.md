@@ -93,7 +93,7 @@ flowchart LR
 ¹ Tenant users can **read** their own subscription rows through RLS; only `app_platform` writes them.
 ² Platform-level audit rows have `tenant_id NULL`; RLS policy for `app_runtime` shows only rows of the current tenant.
 
-Deferred to post-MVP (spec names kept for continuity): `leads`, `quotations`, `quotation_items`, `delivery_items` (partial shipments), `payment_transactions` (gateway attempts), `payment_status_history` (replaced by immutable payment rows + void), `conversation_participants` (group chats), `automation_rules`, `automation_events`, `scheduled_followups`, `message_templates`, `ai_requests`, `user_invitations` (email invite links — MVP uses admin-issued temporary passwords instead), `subscription_features` (= `plan_features`).
+Leads are built (`leads`, `lead_items`, `lead_activities`, migration 0011; one open lead per chat, `won_order_id` links the order it became). Deferred to post-MVP (spec names kept for continuity): `quotations`, `quotation_items`, `delivery_items` (partial shipments), `payment_transactions` (gateway attempts), `payment_status_history` (replaced by immutable payment rows + void), `conversation_participants` (group chats), `automation_rules`, `automation_events`, `scheduled_followups`, `message_templates`, `ai_requests`, `user_invitations` (email invite links — MVP uses admin-issued temporary passwords instead), `subscription_features` (= `plan_features`).
 
 ---
 

@@ -16,6 +16,8 @@ export type ConversationItem = {
   assigned_to_user_id: string | null;
   window_open: boolean;
   window_closes_at: string | null;
+  classification: "lead" | "support" | "spam" | null;
+  open_lead: import("./leads").OpenLeadRef | null;
 };
 
 export type ConversationPage = { items: ConversationItem[]; next_cursor: string | null };
@@ -126,7 +128,7 @@ export function useInboxEvents(): boolean {
     };
     source.onopen = () => setConnected(true);
     source.onerror = () => setConnected(false); // the browser reconnects on its own
-    for (const type of ["message.created", "message.status", "conversation.updated"]) {
+    for (const type of ["message.created", "message.status", "conversation.updated", "lead.created", "lead.updated", "lead.assigned"]) {
       source.addEventListener(type, refresh);
     }
     return () => source.close();

@@ -6,9 +6,10 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
-import { Avatar, EmptyState, cx } from "@/components/ui";
+import { Avatar, EmptyState, Pill, cx } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatTime, useInboxEvents, type ConversationPage } from "@/lib/inbox";
+import { LABEL_TEXT, STAGE_LABEL, STAGE_TONE } from "@/lib/leads";
 
 const VIEWS = [
   { key: "all", label: "All" },
@@ -22,6 +23,14 @@ const CHANNELS = [
   { key: "messenger", label: "Messenger" },
 ] as const;
 
+const LABELS = [
+  { key: "", label: "Everything" },
+  { key: "none", label: "Not sorted" },
+  { key: "open_lead", label: "Open leads" },
+  { key: "support", label: "Support" },
+  { key: "spam", label: "Spam" },
+] as const;
+
 const EMPTY: Record<string, { title: string; body: string }> = {
   all: { title: "No messages yet", body: "When customers message your WhatsApp or Facebook Page, their chats appear here." },
   unread: { title: "You're all caught up", body: "Nobody is waiting for a reply right now." },
@@ -32,13 +41,15 @@ export function ConversationList() {
   const params = useParams<{ id?: string }>();
   const [view, setView] = useState<(typeof VIEWS)[number]["key"]>("all");
   const [channel, setChannel] = useState<string>("");
+  const [label, setLabel] = useState<string>("");
   const live = useInboxEvents();
 
   const conversations = useInfiniteQuery({
-    queryKey: ["conversations", view, channel],
+    queryKey: ["conversations", view, channel, label],
     queryFn: ({ pageParam }) => {
       const query = new URLSearchParams({ view, limit: "30" });
       if (channel) query.set("provider", channel);
+      if (label) query.set("label", label);
       if (pageParam) query.set("cursor", pageParam);
       return api<ConversationPage>("tenant", "GET", `/api/v1/conversations?${query}`);
     },
@@ -95,6 +106,21 @@ export function ConversationList() {
             </button>
           ))}
         </div>
+        <div className="mt-2 flex gap-1.5 overflow-x-auto" aria-label="Sorted as">
+          {LABELS.map((l) => (
+            <button
+              key={l.key}
+              onClick={() => setLabel(l.key)}
+              aria-pressed={label === l.key}
+              className={cx(
+                "shrink-0 rounded-full border px-3 py-1 text-sm transition-colors",
+                label === l.key ? "border-primary bg-primary-soft text-primary" : "border-line text-ink-muted hover:border-line-strong",
+              )}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <ul className="min-h-0 flex-1 overflow-y-auto">
@@ -110,9 +136,15 @@ export function ConversationList() {
           ))}
         {!conversations.isPending && items.length === 0 && (
           <li>
-            <EmptyState icon={Inbox} title={EMPTY[view].title}>
-              {EMPTY[view].body}
-            </EmptyState>
+            {label ? (
+              <EmptyState icon={Inbox} title="No chats here">
+                Try another filter.
+              </EmptyState>
+            ) : (
+              <EmptyState icon={Inbox} title={EMPTY[view].title}>
+                {EMPTY[view].body}
+              </EmptyState>
+            )}
           </li>
         )}
         {items.map((c) => {
@@ -141,6 +173,18 @@ export function ConversationList() {
                   </span>
                   <span className="mt-0.5 flex items-center justify-between gap-2">
                     <span className={cx("truncate text-sm", waiting ? "text-ink" : "text-ink-muted")}>{c.last_message_preview}</span>
+                    {c.open_lead ? (
+                      <span className="shrink-0">
+                        <Pill tone={STAGE_TONE[c.open_lead.stage]}>{STAGE_LABEL[c.open_lead.stage]}</Pill>
+                      </span>
+                    ) : (
+                      c.classification &&
+                      c.classification !== "lead" && (
+                        <span className="shrink-0">
+                          <Pill>{LABEL_TEXT[c.classification]}</Pill>
+                        </span>
+                      )
+                    )}
                     {waiting && (
                       <span className="tabular min-w-5 shrink-0 rounded-full bg-attention px-1.5 text-center text-xs leading-5 font-semibold text-on-attention">
                         <span className="sr-only">Unread messages: </span>

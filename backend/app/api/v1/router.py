@@ -8,6 +8,7 @@ from app.api.v1 import (
     customers,
     events,
     fulfilment,
+    leads,
     meta_callbacks,
     orders,
     products,
@@ -30,6 +31,7 @@ api_router.include_router(conversations.router)
 api_router.include_router(events.router)
 api_router.include_router(channels.router)
 api_router.include_router(products.router)
+api_router.include_router(leads.router)
 api_router.include_router(orders.router)
 api_router.include_router(fulfilment.router)
 api_router.include_router(public.router)

@@ -12,7 +12,9 @@ from sqlalchemy import and_, or_, select
 from app.api import pagination
 from app.api.deps import TenantContext, require
 from app.core.exceptions import AppError, NotFound
-from app.models import ChannelAccount, Conversation, Customer, Message, MessageAttachment, TenantMembership
+from app.models import ChannelAccount, Conversation, Customer, Lead, Message, MessageAttachment, TenantMembership
+from app.models.conversations import CONVERSATION_LABELS
+from app.models.leads import OPEN_STAGES
 from app.schemas.auth import StrictModel
 from app.services import audit, idempotency, messaging, realtime
 from app.workers.queue import enqueue
@@ -28,6 +30,14 @@ class CustomerSummary(BaseModel):
     display_name: str
 
 
+class OpenLead(BaseModel):
+    id: uuid.UUID
+    lead_number: str
+    stage: str
+    assigned_to_user_id: uuid.UUID | None
+    next_followup_at: datetime | None
+
+
 class ConversationOut(BaseModel):
     id: uuid.UUID
     provider: str
@@ -41,6 +51,8 @@ class ConversationOut(BaseModel):
     assigned_to_user_id: uuid.UUID | None
     window_open: bool
     window_closes_at: datetime | None  # end of the 24h reply window (None: customer never wrote)
+    classification: str | None  # staff label: lead | support | spam
+    open_lead: OpenLead | None
 
 
 class ConversationPage(BaseModel):
@@ -87,7 +99,9 @@ class InvalidAssignee(AppError):
     status, code, title = 422, "invalid_assignee", "That person is not an active member of this business"
 
 
-def _out(conversation: Conversation, customer: Customer, account: ChannelAccount) -> ConversationOut:
+def _out(
+    conversation: Conversation, customer: Customer, account: ChannelAccount, open_lead: Lead | None = None
+) -> ConversationOut:
     return ConversationOut(
         id=conversation.id,
         provider=conversation.provider,
@@ -103,7 +117,26 @@ def _out(conversation: Conversation, customer: Customer, account: ChannelAccount
         window_closes_at=conversation.last_inbound_at + messaging.CUSTOMER_SERVICE_WINDOW
         if conversation.last_inbound_at
         else None,
+        classification=conversation.classification,
+        open_lead=OpenLead(
+            id=open_lead.id,
+            lead_number=open_lead.lead_number,
+            stage=open_lead.stage,
+            assigned_to_user_id=open_lead.assigned_to_user_id,
+            next_followup_at=open_lead.next_followup_at,
+        )
+        if open_lead
+        else None,
     )
+
+
+async def _open_leads(ctx: TenantContext, conversation_ids: list[uuid.UUID]) -> dict[uuid.UUID, Lead]:
+    if not conversation_ids:
+        return {}
+    rows = await ctx.session.execute(
+        select(Lead).where(Lead.conversation_id.in_(conversation_ids), Lead.stage.in_(OPEN_STAGES))
+    )
+    return {lead.conversation_id: lead for lead in rows.scalars() if lead.conversation_id}
 
 
 async def _get(ctx: TenantContext, conversation_id: uuid.UUID) -> Conversation:
@@ -119,6 +152,7 @@ async def list_conversations(
     view: Literal["all", "unread", "mine", "unassigned"] = "all",
     provider: Literal["whatsapp", "messenger"] | None = None,
     customer_id: uuid.UUID | None = None,
+    label: Literal["none", "lead", "support", "spam", "open_lead"] | None = None,
     cursor: str | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 30,
 ) -> ConversationPage:
@@ -138,6 +172,17 @@ async def list_conversations(
         query = query.where(Conversation.provider == provider)
     if customer_id:
         query = query.where(Conversation.customer_id == customer_id)
+    if label == "none":
+        query = query.where(Conversation.classification.is_(None))
+    elif label == "open_lead":
+        query = query.where(
+            select(Lead.id).where(Lead.conversation_id == Conversation.id, Lead.stage.in_(OPEN_STAGES)).exists()
+        )
+    elif label:
+        query = query.where(Conversation.classification == label)
+    if label != "spam" and not customer_id:
+        # Chats marked spam stay out of the way unless asked for.
+        query = query.where(or_(Conversation.classification.is_(None), Conversation.classification != "spam"))
     if cursor:
         stamp, last_id = pagination.decode(cursor)
         query = query.where(
@@ -151,7 +196,8 @@ async def list_conversations(
             query.order_by(Conversation.last_message_at.desc(), Conversation.id.desc()).limit(limit + 1)
         )
     ).all()
-    items = [_out(c, cu, a) for c, cu, a in rows[:limit]]
+    open_leads = await _open_leads(ctx, [c.id for c, _, _ in rows[:limit]])
+    items = [_out(c, cu, a, open_leads.get(c.id)) for c, cu, a in rows[:limit]]
     next_cursor = (
         pagination.encode(rows[limit - 1][0].last_message_at, rows[limit - 1][0].id) if len(rows) > limit else None
     )
@@ -164,7 +210,8 @@ async def get_conversation(conversation_id: uuid.UUID, ctx: Reader) -> Conversat
     customer = await ctx.session.get(Customer, conversation.customer_id)
     account = await ctx.session.get(ChannelAccount, conversation.channel_account_id)
     assert customer is not None and account is not None
-    return _out(conversation, customer, account)
+    open_leads = await _open_leads(ctx, [conversation.id])
+    return _out(conversation, customer, account, open_leads.get(conversation.id))
 
 
 @router.get("/{conversation_id}/messages")
@@ -269,6 +316,35 @@ async def assign(
         request=ctx.request,
     )
     background.add_task(realtime.publish, ctx.tenant_id, "conversation.updated", conversation_id=conversation.id)
+    return await get_conversation(conversation_id, ctx)
+
+
+class ClassifyRequest(StrictModel):
+    label: Literal[CONVERSATION_LABELS] | None  # type: ignore[valid-type]
+
+
+@router.post("/{conversation_id}/classify")
+async def classify(
+    conversation_id: uuid.UUID, body: ClassifyRequest, ctx: Writer, background: BackgroundTasks
+) -> ConversationOut:
+    """Triage label: a buying lead, a support question, or spam / not relevant."""
+    conversation = await _get(ctx, conversation_id)
+    before = conversation.classification
+    if before != body.label:
+        conversation.classification = body.label
+        await audit.record(
+            ctx.session,
+            action="CONVERSATION_CLASSIFIED",
+            actor_type="user",
+            actor_id=ctx.user_id,
+            tenant_id=ctx.tenant_id,
+            resource_type="conversation",
+            resource_id=conversation.id,
+            before={"label": before},
+            after={"label": body.label},
+            request=ctx.request,
+        )
+        background.add_task(realtime.publish, ctx.tenant_id, "conversation.updated", conversation_id=conversation.id)
     return await get_conversation(conversation_id, ctx)
 
 

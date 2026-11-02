@@ -7,6 +7,9 @@ Definitions, so every number on the dashboard means one thing:
 * **Received** - recorded payments minus recorded refunds with ``paid_at`` in the period.
 * **Outstanding** - amount still due on live orders (confirmed onwards, not cancelled/rejected/returned).
 * **Overdue** - amount due on issued invoices whose due date has passed.
+* **Leads** - leads created in the period. **Win rate** - of leads closed (won or lost) in the
+  period, the share that became an order. **Value won** - sales value of the orders those won
+  leads became (cancelled orders excluded).
 * Days follow the tenant's timezone (Asia/Kathmandu by default).
 """
 
@@ -22,8 +25,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.sql.elements import ColumnElement
 
-from app.models import Conversation, Customer, Delivery, Invoice, Message, Order, Payment
+from app.models import Conversation, Customer, Delivery, Invoice, Lead, Message, Order, Payment, User
 from app.models.fulfilment import DELIVERY_CLOSED
+from app.models.leads import LOST_REASONS, OPEN_STAGES
 from app.models.sales import ORDER_STATUSES
 
 Period = Literal["today", "7d", "30d", "this_month", "last_month", "90d"]
@@ -89,6 +93,7 @@ class Totals:
     new_orders: int
     new_customers: int
     messages_in: int
+    new_leads: int
 
 
 @dataclass
@@ -103,6 +108,7 @@ class ChannelRow:
     channel: str
     messages_in: int
     conversations: int
+    leads: int
     orders: int
     sales: Decimal
 
@@ -117,6 +123,7 @@ class SourceRow:
 @dataclass
 class Funnel:
     conversations: int
+    leads: int  # leads created from those chats
     converted_conversations: int
     orders: int
     sales: Decimal
@@ -141,6 +148,31 @@ class Buyers:
 
 
 @dataclass
+class StaffLeads:
+    user_id: uuid.UUID | None  # None: unassigned
+    full_name: str
+    open: int
+    created: int  # leads they own that were created in the period
+    won: int
+    lost: int
+    won_value: Decimal
+    overdue_followups: int
+
+
+@dataclass
+class LeadStats:
+    created: int
+    open_now: int
+    won: int
+    lost: int
+    win_rate: float | None  # won / (won + lost) for leads closed in the period
+    won_value: Decimal
+    avg_days_to_win: float | None
+    lost_reasons: dict[str, int]
+    staff: list[StaffLeads]
+
+
+@dataclass
 class Dashboard:
     window: Window
     currency: str
@@ -153,6 +185,7 @@ class Dashboard:
     funnel: Funnel
     snapshot: Snapshot
     buyers: Buyers
+    leads: LeadStats
 
 
 # --- queries --------------------------------------------------------------------------
@@ -204,6 +237,9 @@ async def _totals(session: AsyncSession, tenant_id: uuid.UUID, w: Window) -> Tot
             )
         )
     ).scalar_one()
+    new_leads = (
+        await session.execute(select(func.count()).where(Lead.tenant_id == tenant_id, _in(Lead.created_at, w)))
+    ).scalar_one()
     return Totals(
         sales=orders[0],
         sales_orders=orders[1],
@@ -211,6 +247,7 @@ async def _totals(session: AsyncSession, tenant_id: uuid.UUID, w: Window) -> Tot
         new_orders=orders[2],
         new_customers=new_customers,
         messages_in=messages_in,
+        new_leads=new_leads,
     )
 
 
@@ -258,11 +295,20 @@ async def _channels(session: AsyncSession, tenant_id: uuid.UUID, w: Window) -> l
             .group_by(Order.source_channel)
         )
     ).all()
+    lead_counts = (
+        await session.execute(
+            select(Lead.source_channel, func.count())
+            .where(Lead.tenant_id == tenant_id, _in(Lead.created_at, w))
+            .group_by(Lead.source_channel)
+        )
+    ).all()
     rows: dict[str, ChannelRow] = {}
     for provider, messages, conversations in inbound:
-        rows[provider] = ChannelRow(provider, messages, conversations, 0, ZERO)
+        rows[provider] = ChannelRow(provider, messages, conversations, 0, 0, ZERO)
+    for channel, count in lead_counts:
+        rows.setdefault(channel, ChannelRow(channel, 0, 0, 0, 0, ZERO)).leads = count
     for channel, count, total in sales:
-        row = rows.setdefault(channel, ChannelRow(channel, 0, 0, 0, ZERO))
+        row = rows.setdefault(channel, ChannelRow(channel, 0, 0, 0, 0, ZERO))
         row.orders, row.sales = count, total
     return sorted(rows.values(), key=lambda r: (-r.sales, -r.messages_in, r.channel))
 
@@ -313,7 +359,94 @@ async def _funnel(session: AsyncSession, tenant_id: uuid.UUID, w: Window) -> Fun
             )
         )
     ).one()
-    return Funnel(conversations, from_chat[0], from_chat[1], from_chat[2])
+    leads_from_chats = (
+        await session.execute(
+            select(func.count()).where(
+                Lead.tenant_id == tenant_id,
+                _in(Lead.created_at, w),
+                Lead.conversation_id.in_(select(chats.c.id)),
+            )
+        )
+    ).scalar_one()
+    return Funnel(conversations, leads_from_chats, from_chat[0], from_chat[1], from_chat[2])
+
+
+async def _leads(session: AsyncSession, tenant_id: uuid.UUID, w: Window, now: datetime) -> LeadStats:
+    created_in = _in(Lead.created_at, w)
+    closed_in = _in(Lead.closed_at, w)
+    won_value_expr = case(
+        (and_(Lead.stage == "WON", closed_in, Order.status.in_(SALE_STATUSES)), Order.grand_total), else_=ZERO
+    )
+    overdue = and_(Lead.stage.in_(OPEN_STAGES), Lead.next_followup_at.is_not(None), Lead.next_followup_at < now)
+    per_owner = (
+        await session.execute(
+            select(
+                Lead.assigned_to_user_id,
+                func.count().filter(Lead.stage.in_(OPEN_STAGES)),
+                func.count().filter(created_in),
+                func.count().filter(Lead.stage == "WON", closed_in),
+                func.count().filter(Lead.stage == "LOST", closed_in),
+                func.coalesce(func.sum(won_value_expr), ZERO),
+                func.count().filter(overdue),
+                func.avg(
+                    case(
+                        (
+                            and_(Lead.stage == "WON", closed_in),
+                            func.extract("epoch", Lead.closed_at - Lead.created_at) / 86400,
+                        ),
+                        else_=None,
+                    )
+                ),
+            )
+            .outerjoin(Order, and_(Order.tenant_id == Lead.tenant_id, Order.id == Lead.won_order_id))
+            .where(Lead.tenant_id == tenant_id)
+            .group_by(Lead.assigned_to_user_id)
+        )
+    ).all()
+    names = dict(
+        (
+            await session.execute(select(User.id, User.full_name).where(User.id.in_({r[0] for r in per_owner if r[0]})))
+        ).all()
+    )
+    staff = [
+        StaffLeads(
+            user_id=r[0],
+            full_name=names.get(r[0], "") if r[0] else "Unassigned",
+            open=r[1],
+            created=r[2],
+            won=r[3],
+            lost=r[4],
+            won_value=r[5],
+            overdue_followups=r[6],
+        )
+        for r in per_owner
+        if any(r[1:5]) or r[6]
+    ]
+    staff.sort(key=lambda s: (-s.won_value, -s.won, -s.open, s.full_name))
+    won = sum(s.won for s in staff)
+    lost = sum(s.lost for s in staff)
+    won_days = [(r[3], r[7]) for r in per_owner if r[3] and r[7] is not None]
+    avg_days = sum(float(d) * n for n, d in won_days) / won if won and won_days else None
+    reasons = dict(
+        (
+            await session.execute(
+                select(Lead.lost_reason, func.count())
+                .where(Lead.tenant_id == tenant_id, Lead.stage == "LOST", closed_in)
+                .group_by(Lead.lost_reason)
+            )
+        ).all()
+    )
+    return LeadStats(
+        created=sum(s.created for s in staff),
+        open_now=sum(s.open for s in staff),
+        won=won,
+        lost=lost,
+        win_rate=won / (won + lost) if won + lost else None,
+        won_value=sum((s.won_value for s in staff), ZERO),
+        avg_days_to_win=round(avg_days, 1) if avg_days is not None else None,
+        lost_reasons={r: reasons[r] for r in LOST_REASONS if reasons.get(r)},
+        staff=staff,
+    )
 
 
 async def _snapshot(session: AsyncSession, tenant_id: uuid.UUID, w: Window, today: date) -> Snapshot:
@@ -389,4 +522,5 @@ async def dashboard(
         funnel=await _funnel(session, tenant_id, window),
         snapshot=await _snapshot(session, tenant_id, window, today),
         buyers=await _buyers(session, tenant_id, window),
+        leads=await _leads(session, tenant_id, window, datetime.now(window.start.tzinfo)),
     )

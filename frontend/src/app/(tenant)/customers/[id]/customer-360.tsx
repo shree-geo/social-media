@@ -6,11 +6,64 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 
+import { LeadSheet } from "@/components/lead-sheet";
 import { useMe } from "@/components/tenant-shell";
 import { Alert, Avatar, Button, ChannelTag, EmptyState, Panel, Pill, Spinner } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { formatPhone, formatTime, type Customer360 } from "@/lib/inbox";
+import { STAGE_LABEL, STAGE_TONE, type LeadPage } from "@/lib/leads";
 import { PAYMENT_LABEL, STATUS_LABEL, STATUS_TONE, formatMoney } from "@/lib/sales";
+
+function CustomerLeads({ customer, conversationId }: { customer: { id: string; display_name: string }; conversationId: string | null }) {
+  const me = useMe();
+  const canWrite = me.data?.permissions.includes("lead.write") ?? false;
+  const [creating, setCreating] = useState(false);
+  const leads = useQuery({
+    queryKey: ["leads", "customer", customer.id],
+    queryFn: () => api<LeadPage>("tenant", "GET", `/api/v1/leads?customer_id=${customer.id}&limit=20`),
+  });
+  const items = leads.data?.items ?? [];
+  return (
+    <Panel
+      title="Leads"
+      actions={
+        canWrite && (
+          <Button size="sm" variant="secondary" icon={Plus} onClick={() => setCreating(true)}>
+            New lead
+          </Button>
+        )
+      }
+    >
+      {items.length === 0 ? (
+        <p className="text-sm text-ink-muted">{leads.isPending ? "Loading…" : "No leads yet."}</p>
+      ) : (
+        <ul className="-mx-5 -my-4 divide-y divide-line">
+          {items.map((l) => (
+            <li key={l.id}>
+              <Link href={`/leads/${l.id}`} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-sunken/60">
+                <span className="min-w-0">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="tabular font-medium text-ink">{l.lead_number}</span>
+                    <Pill tone={STAGE_TONE[l.stage]}>{STAGE_LABEL[l.stage]}</Pill>
+                  </span>
+                  <span className="block truncate text-sm text-ink-muted">{l.item_summary}</span>
+                </span>
+                <span className="tabular shrink-0 text-sm text-ink">{formatMoney(l.expected_value, l.currency)}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {creating && (
+        <LeadSheet
+          conversationId={conversationId ?? undefined}
+          customer={customer}
+          onClose={() => setCreating(false)}
+        />
+      )}
+    </Panel>
+  );
+}
 
 function longDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" });
@@ -49,6 +102,7 @@ export function CustomerProfile() {
   const c = customer.data;
   const canWrite = me.data?.permissions.includes("customer.write") ?? false;
   const canOrder = me.data?.permissions.includes("order.write") ?? false;
+  const canLeads = me.data?.permissions.includes("lead.read") ?? false;
   const channels = [...new Set(c.identities.map((i) => i.provider))];
 
   return (
@@ -100,6 +154,9 @@ export function CustomerProfile() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <div className="grid content-start gap-6">
+          {canLeads && (
+            <CustomerLeads customer={{ id: c.id, display_name: c.display_name }} conversationId={c.conversations[0]?.id ?? null} />
+          )}
           <Panel
             title="Orders"
             actions={

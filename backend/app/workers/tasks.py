@@ -2,7 +2,7 @@ import uuid
 
 from app.core.database import platform_sessionmaker
 from app.core.logging import get_logger
-from app.services import channels, ingestion, invoices, messaging, onboarding
+from app.services import channels, ingestion, invoices, leads, messaging, onboarding, realtime
 from app.workers.celery_app import celery_app, run_async
 from app.workers.queue import enqueue
 
@@ -87,3 +87,27 @@ async def _render_invoice_pdf(tenant_id: uuid.UUID, invoice_id: uuid.UUID) -> bo
 @celery_app.task(name="invoices.render_pdf")
 def render_invoice_pdf(tenant_id: str, invoice_id: str) -> bool:
     return run_async(_render_invoice_pdf(uuid.UUID(tenant_id), uuid.UUID(invoice_id)))
+
+
+async def _lead_followups_due() -> int:
+    async with platform_sessionmaker()() as session, session.begin():
+        due = await leads.claim_due_followups(session)
+    # Published after commit; a lost event is harmless (the "Follow-ups due" list is the source of truth).
+    for item in due:
+        await realtime.publish(
+            item.tenant_id,
+            "lead.followup_due",
+            lead_id=item.lead_id,
+            lead_number=item.lead_number,
+            assigned_to_user_id=item.assigned_to_user_id,
+        )
+    return len(due)
+
+
+@celery_app.task(name="leads.followups_due")
+def lead_followups_due() -> int:
+    """Every few minutes (beat): tell lead owners in the app that a follow-up is due."""
+    count = run_async(_lead_followups_due())
+    if count:
+        log.info("lead_followups_due", count=count)
+    return count

@@ -58,7 +58,9 @@ class DocumentSequence(Base):
     """Gap-free human-readable numbers per tenant, document type and period."""
 
     __tablename__ = "document_sequences"
-    __table_args__ = (CheckConstraint(check_in("doc_type", ("ORD", "INV", "PAY", "DEL", "SUB")), name="doc_type"),)
+    __table_args__ = (
+        CheckConstraint(check_in("doc_type", ("ORD", "INV", "PAY", "DEL", "SUB", "LD")), name="doc_type"),
+    )
 
     tenant_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
     doc_type: Mapped[str] = mapped_column(primary_key=True)

@@ -44,6 +44,7 @@ celery_app.conf.update(
     beat_schedule={
         # Times are Asia/Kathmandu (``timezone`` above). Sweepers and token checks are added with their modules.
         "system-sweep": {"task": "system.sweep", "schedule": 60.0},
+        "leads-followups-due": {"task": "leads.followups_due", "schedule": 300.0},
         "channels-health-check": {"task": "channels.check_health", "schedule": crontab(hour=3, minute=0)},
         "subscriptions-recompute-statuses": {
             "task": "subscriptions.recompute_statuses",

@@ -30,7 +30,7 @@ from app.models import (
     TenantSettings,
 )
 from app.models.fulfilment import DELIVERY_CLOSED
-from app.services import audit, catalogue, entitlements, money, numbering
+from app.services import audit, catalogue, entitlements, leads, money, numbering
 from app.services.audit import RequestInfo
 from app.services.subscriptions import tenant_today
 
@@ -161,9 +161,17 @@ async def create_order(
     shipping_fee: Decimal = Decimal("0"),
     delivery_address: dict[str, Any] | None = None,
     notes: str | None = None,
+    lead_id: uuid.UUID | None = None,
     request: RequestInfo,
 ) -> Order:
     channel_account_id = None
+    lead = None
+    if lead_id is not None:
+        # Converting a lead: the order belongs to the lead's customer and chat, and closes the lead as WON.
+        lead = await leads.lock_for_conversion(session, lead_id)
+        customer_id, conversation_id = lead.customer_id, lead.conversation_id
+        source_channel = source_channel or lead.source_channel
+        lead_source = lead_source or lead.lead_source
     if conversation_id is not None:
         conversation = await session.get(Conversation, conversation_id)
         if conversation is None:
@@ -224,6 +232,8 @@ async def create_order(
         )
     )
     customer.last_interaction_at = datetime.now(UTC)
+    if lead is not None:
+        await leads.mark_won(session, lead=lead, order=order, user_id=user_id, request=request)
     await audit.record(
         session,
         action="ORDER_CREATED",

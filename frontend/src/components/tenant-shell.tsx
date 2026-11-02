@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  BellRing,
   Home,
   LogOut,
   MessagesSquare,
@@ -9,6 +10,8 @@ import {
   Package,
   Plug,
   ShoppingBag,
+  Target,
+  X,
   Truck,
   Users,
   Wallet,
@@ -16,7 +19,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Suspense, useEffect, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 
 import { BrandMark } from "@/components/brand-mark";
 import { cx } from "@/components/ui";
@@ -30,6 +33,7 @@ type NavItem = { href: string; label: string; icon: LucideIcon; permission: stri
 export const NAV: Omit<NavItem, "badge">[] = [
   { href: "/dashboard", label: "Home", icon: Home, permission: null, phone: true },
   { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "conversation.read", phone: true },
+  { href: "/leads", label: "Leads", icon: Target, permission: "lead.read", phone: true },
   { href: "/orders", label: "Orders", icon: ShoppingBag, permission: "order.read", phone: true },
   { href: "/customers", label: "Customers", icon: Users, permission: "customer.read", phone: true },
   { href: "/deliveries", label: "Deliveries", icon: Truck, permission: "delivery.read", phone: true },
@@ -61,6 +65,52 @@ function useWaitingCount(enabled: boolean): number {
     refetchInterval: 30_000,
   });
   return waiting.data?.items.length ?? 0;
+}
+
+/** Your open leads with a follow-up overdue or due today (shown on the Leads tab). */
+function useFollowupCount(enabled: boolean): number {
+  const count = useQuery({
+    queryKey: ["lead-followups"],
+    queryFn: () => api<{ overdue: number; today: number }>("tenant", "GET", "/api/v1/leads/followups/count"),
+    enabled,
+    refetchInterval: 60_000,
+  });
+  return (count.data?.overdue ?? 0) + (count.data?.today ?? 0);
+}
+
+type Notice = { key: string; text: string; href: string };
+
+/**
+ * Lead events from the live stream: refresh lead screens anywhere in the app, and tell the
+ * owner when a lead is given to them or a follow-up comes due.
+ */
+function useLeadEvents(enabled: boolean, userId: string | undefined): [Notice[], (key: string) => void] {
+  const queryClient = useQueryClient();
+  const [notices, setNotices] = useState<Notice[]>([]);
+  useEffect(() => {
+    if (!enabled) return;
+    const source = new EventSource("/api/v1/events/stream", { withCredentials: true });
+    const handle = (event: MessageEvent<string>) => {
+      const data = JSON.parse(event.data) as { type: string; lead_id?: string; lead_number?: string; assigned_to_user_id?: string | null };
+      void queryClient.invalidateQueries({ queryKey: ["leads"] });
+      void queryClient.invalidateQueries({ queryKey: ["lead-followups"] });
+      if (data.lead_id) void queryClient.invalidateQueries({ queryKey: ["lead", data.lead_id] });
+      if (!data.lead_id || !userId || data.assigned_to_user_id !== userId) return;
+      const text =
+        data.type === "lead.followup_due"
+          ? `Time to follow up${data.lead_number ? ` on ${data.lead_number}` : ""}`
+          : data.type === "lead.assigned"
+            ? "A lead was given to you"
+            : null;
+      if (!text) return;
+      const key = `${data.type}-${data.lead_id}-${Date.now()}`;
+      setNotices((list) => [...list.slice(-2), { key, text, href: `/leads/${data.lead_id}` }]);
+      setTimeout(() => setNotices((list) => list.filter((n) => n.key !== key)), 10_000);
+    };
+    for (const type of ["lead.created", "lead.updated", "lead.assigned", "lead.followup_due"]) source.addEventListener(type, handle);
+    return () => source.close();
+  }, [enabled, userId, queryClient]);
+  return [notices, (key) => setNotices((list) => list.filter((n) => n.key !== key))];
 }
 
 // Reads the URL, so it sits in its own Suspense boundary: on dynamic routes the pathname
@@ -116,6 +166,9 @@ export function TenantShell({ children }: { children: ReactNode }) {
   const me = useMe();
   const canReadInbox = me.data?.permissions.includes("conversation.read") ?? false;
   const waiting = useWaitingCount(canReadInbox && !me.data?.must_change_password);
+  const canReadLeads = (me.data?.permissions.includes("lead.read") ?? false) && !me.data?.must_change_password;
+  const followups = useFollowupCount(canReadLeads);
+  const [notices, dismiss] = useLeadEvents(canReadLeads, me.data?.user_id);
   const loadFailed = me.isError && !(me.error instanceof ApiError && me.error.status === 401);
 
   useEffect(() => {
@@ -128,7 +181,7 @@ export function TenantShell({ children }: { children: ReactNode }) {
   const allowed = new Set(me.data?.permissions ?? []);
   const nav: NavItem[] = NAV.filter((item) => item.permission === null || allowed.has(item.permission)).map((item) => ({
     ...item,
-    badge: item.href === "/inbox" ? waiting : undefined,
+    badge: item.href === "/inbox" ? waiting : item.href === "/leads" ? followups : undefined,
   }));
 
   const { tabs, more } = splitPhoneNav(nav);
@@ -185,6 +238,22 @@ export function TenantShell({ children }: { children: ReactNode }) {
         )}
         <div className="flex min-h-0 flex-1 flex-col pb-16 md:pb-0">{children}</div>
       </div>
+
+      {notices.length > 0 && (
+        <div className="fixed right-4 bottom-20 z-40 flex w-[min(22rem,calc(100vw-2rem))] flex-col gap-2 md:bottom-4" aria-live="polite">
+          {notices.map((n) => (
+            <div key={n.key} className="flex items-center gap-3 rounded-panel border border-line bg-surface p-3 shadow-lg">
+              <BellRing className="size-5 shrink-0 text-primary" aria-hidden />
+              <Link href={n.href} onClick={() => dismiss(n.key)} className="min-w-0 flex-1 font-medium text-ink hover:text-primary">
+                {n.text}
+              </Link>
+              <button type="button" onClick={() => dismiss(n.key)} className="grid size-8 place-items-center rounded-control text-ink-muted hover:bg-sunken" aria-label="Dismiss">
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Phone navigation: most staff use the app on a phone. */}
       <nav

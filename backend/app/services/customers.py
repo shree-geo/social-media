@@ -26,6 +26,7 @@ from app.models import (
     CustomerNote,
     CustomerTagLink,
     Invoice,
+    Lead,
     Order,
     Payment,
 )
@@ -235,6 +236,7 @@ _MOVABLE: tuple[tuple[str, Any], ...] = (
     ("customer_addresses", CustomerAddress),
     ("customer_notes", CustomerNote),
     ("orders", Order),
+    ("leads", Lead),
     ("invoices", Invoice),
     ("payments", Payment),
 )

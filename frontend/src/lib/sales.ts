@@ -79,6 +79,7 @@ export type Order = OrderSummary & {
   delivery_address: Record<string, string> | null;
   notes: string | null;
   source_conversation_id: string | null;
+  lead: { id: string; lead_number: string } | null;
   history: { from_status: string | null; to_status: string; reason: string | null; at: string }[];
   invoices: InvoiceSummary[];
   deliveries: Delivery[];

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { Check, MessagesSquare, Truck } from "lucide-react";
+import { Check, MessagesSquare, Target, Truck } from "lucide-react";
 import Link from "next/link";
 
 import { useMe } from "@/components/tenant-shell";
@@ -161,6 +161,34 @@ function WaitingSummary() {
   );
 }
 
+function FollowupsSummary() {
+  const count = useQuery({
+    queryKey: ["lead-followups"],
+    queryFn: () => api<{ overdue: number; today: number }>("tenant", "GET", "/api/v1/leads/followups/count"),
+  });
+  const overdue = count.data?.overdue ?? 0;
+  const total = overdue + (count.data?.today ?? 0);
+  return (
+    <Link
+      href="/leads?tab=followups"
+      className={cx(
+        "flex items-center gap-4 rounded-panel border px-5 py-4 transition-colors",
+        overdue ? "border-attention/50 bg-attention-soft hover:border-attention" : "border-line bg-surface hover:border-line-strong",
+      )}
+    >
+      <span className={cx("grid size-11 place-items-center rounded-full", overdue ? "bg-attention text-on-attention" : "bg-primary-soft text-primary")}>
+        <Target className="size-5" aria-hidden />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-lg font-semibold text-ink">
+          {total === 0 ? "No follow-ups due" : total === 1 ? "1 lead to follow up" : `${total} leads to follow up`}
+        </span>
+        <span className="block text-sm text-ink-muted">{overdue ? `${overdue} overdue · your leads` : "Your leads, today and overdue"}</span>
+      </span>
+    </Link>
+  );
+}
+
 function DeliveriesSummary({ mine }: { mine: boolean }) {
   const view = mine ? "mine" : "today";
   const due = useQuery({
@@ -206,6 +234,7 @@ export function Dashboard() {
       <div className="grid gap-6">
         <div className={cx("grid gap-6", canReadReports && "lg:grid-cols-2")}>
           {canReadInbox && <WaitingSummary />}
+          {me.data.permissions.includes("lead.read") && <FollowupsSummary />}
           {me.data.permissions.includes("delivery.read") && <DeliveriesSummary mine={me.data.roles.includes("DELIVERY")} />}
         </div>
         {canReadReports && <BusinessReport />}

@@ -42,6 +42,7 @@ from app.models.identity import (
     TenantOnboarding,
     User,
 )
+from app.models.leads import Lead, LeadActivity, LeadItem
 from app.models.platform import (
     Plan,
     PlanFeature,
@@ -83,6 +84,9 @@ __all__ = [
     "InventoryTransaction",
     "Invoice",
     "InvoiceItem",
+    "Lead",
+    "LeadActivity",
+    "LeadItem",
     "MembershipRole",
     "Message",
     "MessageAttachment",

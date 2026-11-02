@@ -23,6 +23,8 @@ MESSAGE_TYPES = (
     "unsupported",
 )
 MESSAGE_STATUSES = ("received", "queued", "sending", "sent", "delivered", "read", "failed")
+# Staff triage of a chat: buying interest, after-sales/support, or junk.
+CONVERSATION_LABELS = ("lead", "support", "spam")
 SENDER_TYPES = ("customer", "user", "system", "external_app")
 
 
@@ -40,6 +42,9 @@ class Conversation(UUIDPrimaryKey, TenantOwned, Timestamps, Base):
         ForeignKeyConstraint(["tenant_id", "customer_id"], ["customers.tenant_id", "customers.id"]),
         CheckConstraint(check_in("status", ("open", "closed")), name="status"),
         CheckConstraint("unread_count >= 0", name="unread_count"),
+        CheckConstraint(
+            f"classification IS NULL OR {check_in('classification', CONVERSATION_LABELS)}", name="classification"
+        ),
         Index("conversations_identity_key", "tenant_id", "channel_account_id", "customer_identity_id", unique=True),
         Index("ix_conversations_inbox", "tenant_id", text("last_message_at DESC"), "id"),
         Index("ix_conversations_inbox_provider", "tenant_id", "provider", text("last_message_at DESC")),
