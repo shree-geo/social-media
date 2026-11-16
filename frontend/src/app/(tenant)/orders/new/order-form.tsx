@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 
 import { CustomerPicker, INPUT, ProductPicker } from "@/components/pickers";
+import { useMe } from "@/components/tenant-shell";
 import { Alert, Avatar, Button, ChannelTag, PageHeader, Spinner, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import type { ConversationItem } from "@/lib/inbox";
@@ -114,6 +115,9 @@ function OrderFormBody({ lead }: { lead: Lead | null }) {
   const customer = leadCustomer ?? conversation.data?.customer ?? picked ?? presetCustomer.data ?? null;
   const subtotal = lines.reduce((sum, l) => sum + Number(l.quantity || 0) * Number(l.unit_price || 0) - Number(l.discount || 0), 0);
   const leadClosed = lead ? !isOpen(lead.stage) : false;
+  // Business rule: a chat order has to come from the chat's lead (old "Create order" links land here).
+  const me = useMe();
+  const needsLead = Boolean(!leadId && params.get("conversation") && (me.data?.orders_need_lead ?? true));
 
   function addLine(product: Product, variant: Variant, quantity = "1", price?: string) {
     setLines((ls) => {
@@ -193,6 +197,15 @@ function OrderFormBody({ lead }: { lead: Lead | null }) {
       {lead && !leadClosed && (
         <Alert tone="info" title="Converting a lead">
           Check the products and prices with the customer. Saving creates the order and marks {lead.lead_number} as won.
+        </Alert>
+      )}
+      {needsLead && (
+        <Alert tone="warning" title="Create a lead first">
+          This business takes WhatsApp and Messenger orders through leads.{" "}
+          <Link href={`/inbox/${conversationId}`} className="font-medium underline">
+            Go back to the chat
+          </Link>{" "}
+          and mark it as a lead, then use Convert to order once the customer confirms.
         </Alert>
       )}
       {leadClosed && (
@@ -325,7 +338,7 @@ function OrderFormBody({ lead }: { lead: Lead | null }) {
             <p className="tabular text-lg font-semibold text-ink">{formatMoney(subtotal + Number(shipping || 0), "NPR")}</p>
             <p className="text-xs text-ink-muted">VAT, if any, is added when you save.</p>
           </div>
-          <Button type="submit" loading={saving} disabled={!customer || lines.length === 0 || unmatched.length > 0 || leadClosed}>
+          <Button type="submit" loading={saving} disabled={!customer || lines.length === 0 || unmatched.length > 0 || leadClosed || needsLead}>
             {lead ? "Save order and mark won" : "Save order"}
           </Button>
         </div>

@@ -42,6 +42,8 @@ async def test_dashboard_adds_up_chats_orders_payments_and_channels(
     await jobs.run_all()
     convo = (await owner.get("/api/v1/conversations")).json()["items"][0]
 
+    # This test orders straight from the chat; the default rule (orders go through a lead) is in test_leads.
+    assert (await owner.patch("/api/v1/settings", json={"orders_need_lead": False})).status_code == 200
     # A: from the WhatsApp chat, TikTok lead, 4,500.  B: phone order, 9,200, 5,000 paid.  C: still NEW.
     chair = (await _chair(owner))["variants"][0]
     a = (

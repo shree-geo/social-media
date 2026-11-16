@@ -11,12 +11,12 @@ from sqlalchemy import and_, or_, select
 
 from app.api import pagination
 from app.api.deps import TenantContext, require
-from app.core.exceptions import AppError, NotFound
+from app.core.exceptions import AppError, Conflict, NotFound
 from app.models import ChannelAccount, Conversation, Customer, Lead, Message, MessageAttachment, TenantMembership
 from app.models.conversations import CONVERSATION_LABELS
 from app.models.leads import OPEN_STAGES
 from app.schemas.auth import StrictModel
-from app.services import audit, idempotency, messaging, realtime
+from app.services import audit, idempotency, leads, messaging, realtime
 from app.workers.queue import enqueue
 
 router = APIRouter(prefix="/conversations", tags=["inbox"])
@@ -327,9 +327,42 @@ class ClassifyRequest(StrictModel):
 async def classify(
     conversation_id: uuid.UUID, body: ClassifyRequest, ctx: Writer, background: BackgroundTasks
 ) -> ConversationOut:
-    """Triage label: a buying lead, a support question, or spam / not relevant."""
+    """Triage label: a buying lead, a support question, or spam / not relevant.
+
+    Marking a chat as a lead also opens a lead for it (stage New, no products yet) when it has none
+    and the user may create leads, so "this is a sale" is one tap; products are added on the lead.
+    """
     conversation = await _get(ctx, conversation_id)
     before = conversation.classification
+    if (
+        body.label == "lead"
+        and "lead.write" in ctx.permissions
+        and await leads.open_lead_for_conversation(ctx.session, conversation.id) is None
+    ):
+        try:
+            lead = await leads.create_lead(
+                ctx.session,
+                tenant_id=ctx.tenant_id,
+                user_id=ctx.user_id,
+                can_assign="lead.assign" in ctx.permissions,
+                items=[],
+                allow_no_items=True,
+                conversation_id=conversation.id,
+                request=ctx.request,
+            )
+        except Conflict as exc:  # someone else opened it a moment ago (checked under the chat's row lock)
+            if exc.code != "lead_exists":
+                raise
+        else:
+            await ctx.session.flush()
+            background.add_task(
+                realtime.publish,
+                ctx.tenant_id,
+                "lead.created",
+                lead_id=lead.id,
+                conversation_id=lead.conversation_id,
+                assigned_to_user_id=lead.assigned_to_user_id,
+            )
     if before != body.label:
         conversation.classification = body.label
         await audit.record(

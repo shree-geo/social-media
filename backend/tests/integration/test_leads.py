@@ -342,3 +342,56 @@ async def test_leads_are_isolated_between_tenants(make_client: ClientFactory, pl
     assert (await second.get(f"/api/v1/leads/{lead['id']}")).status_code == 404
     assert (await second.get("/api/v1/leads")).json()["items"] == []
     assert (await second.post(f"/api/v1/leads/{lead['id']}/notes", json={"body": "x"})).status_code == 404
+
+
+async def test_chat_orders_need_a_lead_and_marking_a_chat_opens_one(
+    make_client: ClientFactory, platform_db: AsyncEngine, fake_adapter: FakeAdapter, jobs: Jobs
+) -> None:
+    owner, tenant_id = await _shop(make_client, platform_db)
+    convo = await _chat(make_client, platform_db, tenant_id, jobs)
+    customer_id = (await owner.get(f"/api/v1/conversations/{convo['id']}")).json()["customer"]["id"]
+    chair = (await _chair(owner))["variants"][0]
+    line = [{"variant_id": chair["id"], "quantity": "1"}]
+
+    # The rule is on by default: no order straight from a chat, nor a customer order tagged WhatsApp.
+    assert (await owner.get("/api/v1/auth/me")).json()["orders_need_lead"] is True
+    direct = await owner.post("/api/v1/orders", json={"conversation_id": convo["id"], "items": line}, headers=key())
+    assert (direct.status_code, direct.json()["code"]) == (409, "lead_required")
+    tagged = await owner.post(
+        "/api/v1/orders",
+        json={"customer_id": customer_id, "source_channel": "whatsapp", "items": line},
+        headers=key(),
+    )
+    assert tagged.status_code == 409
+    phone = await owner.post(
+        "/api/v1/orders", json={"customer_id": customer_id, "source_channel": "phone", "items": line}, headers=key()
+    )
+    assert phone.status_code == 201, phone.text  # phone and walk-in orders are not affected
+
+    # One tap: marking the chat as a lead opens a New lead with no products, owned by whoever tapped.
+    marked = await owner.post(f"/api/v1/conversations/{convo['id']}/classify", json={"label": "lead"})
+    assert marked.status_code == 200, marked.text
+    open_lead = marked.json()["open_lead"]
+    assert open_lead["stage"] == "NEW"
+    lead = (await owner.get(f"/api/v1/leads/{open_lead['id']}")).json()
+    me = (await owner.get("/api/v1/auth/me")).json()
+    assert (lead["items"], lead["item_summary"], lead["source_channel"]) == ([], "", "whatsapp")
+    assert lead["assigned_to"]["id"] == me["user_id"]
+    again = await owner.post(f"/api/v1/conversations/{convo['id']}/classify", json={"label": "lead"})
+    assert again.json()["open_lead"]["id"] == open_lead["id"]  # no second lead
+
+    # Products are added on the lead, then it converts to an order as usual.
+    await owner.patch(f"/api/v1/leads/{lead['id']}", json={"items": line})
+    order = await owner.post("/api/v1/orders", json={"lead_id": lead["id"], "items": line}, headers=key())
+    assert order.status_code == 201, order.text
+    assert order.json()["source_conversation_id"] == convo["id"]
+
+    # Only the owner or an admin changes the rule; turning it off allows direct chat orders again.
+    sales, _ = await _staff(make_client, owner, "SALES")
+    assert (await sales.get("/api/v1/settings")).status_code == 403
+    assert (await sales.patch("/api/v1/settings", json={"orders_need_lead": False})).status_code == 403
+    off = await owner.patch("/api/v1/settings", json={"orders_need_lead": False})
+    assert off.json() == {"orders_need_lead": False}
+    assert (await sales.get("/api/v1/auth/me")).json()["orders_need_lead"] is False
+    direct = await owner.post("/api/v1/orders", json={"conversation_id": convo["id"], "items": line}, headers=key())
+    assert direct.status_code == 201, direct.text

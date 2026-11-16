@@ -57,6 +57,13 @@ class InvalidOrder(AppError):
     status, code, title = 422, "invalid_order", "This order can't be saved"
 
 
+class LeadRequired(AppError):
+    status, code, title = 409, "lead_required", "Chat orders start as a lead"
+
+
+CHAT_CHANNELS = ("whatsapp", "messenger")
+
+
 class InvalidTransition(AppError):
     status, code, title = 409, "invalid_status_change", "This status change isn't allowed"
 
@@ -172,6 +179,13 @@ async def create_order(
         customer_id, conversation_id = lead.customer_id, lead.conversation_id
         source_channel = source_channel or lead.source_channel
         lead_source = lead_source or lead.lead_source
+    elif conversation_id is not None or source_channel in CHAT_CHANNELS:
+        rules = await session.get(TenantSettings, tenant_id)
+        if rules is not None and rules.orders_need_lead:
+            raise LeadRequired(
+                "Orders from WhatsApp and Messenger go through a lead: create a lead from the chat, "
+                "then convert it to an order once the customer confirms."
+            )
     if conversation_id is not None:
         conversation = await session.get(Conversation, conversation_id)
         if conversation is None:

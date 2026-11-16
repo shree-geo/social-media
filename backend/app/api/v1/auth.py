@@ -13,7 +13,7 @@ from app.api.deps import (
 from app.core.database import runtime_sessionmaker
 from app.core.exceptions import Unauthorized
 from app.core.security import InvalidAccessToken, decode_access_token
-from app.models import User
+from app.models import TenantSettings, User
 from app.schemas.auth import (
     ChangePasswordRequest,
     CsrfResponse,
@@ -114,6 +114,7 @@ async def switch_tenant(body: SwitchTenantRequest, ctx: TenantCtxAllowPending, r
 @router.get("/me")
 async def me(ctx: TenantCtxAllowPending) -> MeResponse:
     memberships = await auth.memberships_for(ctx.session, ctx.user_id)
+    rules = await ctx.session.get(TenantSettings, ctx.tenant_id)
     sub = ctx.subscription
     return MeResponse(
         user_id=ctx.user_id,
@@ -129,4 +130,5 @@ async def me(ctx: TenantCtxAllowPending) -> MeResponse:
             status=sub.status, access=sub.access.value, expiry_date=sub.expiry_date, days_remaining=sub.days_remaining
         ),
         memberships=[MembershipOut(tenant_id=m.tenant_id, business_name=m.business_name) for m in memberships],
+        orders_need_lead=rules.orders_need_lead if rules is not None else True,
     )

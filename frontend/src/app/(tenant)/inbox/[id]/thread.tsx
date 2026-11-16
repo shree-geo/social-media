@@ -229,7 +229,11 @@ function LeadStrip({ leadId, canWrite, canOrder }: { leadId: string; canWrite: b
       </Link>
       {canWrite ? <StageSelect lead={l} /> : <Pill tone="primary">{l.stage}</Pill>}
       <span className="min-w-0 truncate text-sm text-ink-muted">
-        {l.item_summary}
+        {l.item_summary || (
+          <Link href={`/leads/${l.id}`} className="text-primary hover:underline">
+            Add products
+          </Link>
+        )}
         {Number(l.expected_value) > 0 && <span className="tabular"> · {formatMoney(l.expected_value, l.currency)}</span>}
       </span>
       <span className="text-sm text-ink-muted">{l.assigned_to ? l.assigned_to.full_name : "No owner"}</span>
@@ -253,7 +257,7 @@ function LeadStrip({ leadId, canWrite, canOrder }: { leadId: string; canWrite: b
 }
 
 /** Unlabelled chats: one tap to say what this is. */
-function TriageBar({ conversation, onLead }: { conversation: ConversationItem; onLead: () => void }) {
+function TriageBar({ conversation }: { conversation: ConversationItem }) {
   const refresh = useLeadRefresh();
   const queryClient = useQueryClient();
   const classify = useMutation({
@@ -278,8 +282,8 @@ function TriageBar({ conversation, onLead }: { conversation: ConversationItem; o
   return (
     <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-3 py-2 text-sm sm:px-4">
       <span className="text-ink-muted">Is this a sale?</span>
-      <Button size="sm" icon={Target} onClick={onLead}>
-        Yes, create lead
+      <Button size="sm" icon={Target} loading={classify.isPending && classify.variables === "lead"} onClick={() => classify.mutate("lead")}>
+        Yes, it&apos;s a lead
       </Button>
       <Button size="sm" variant="secondary" loading={classify.isPending && classify.variables === "support"} onClick={() => classify.mutate("support")}>
         Support question
@@ -287,6 +291,7 @@ function TriageBar({ conversation, onLead }: { conversation: ConversationItem; o
       <Button size="sm" variant="ghost" loading={classify.isPending && classify.variables === "spam"} onClick={() => classify.mutate("spam")}>
         Spam
       </Button>
+      {classify.error && <span className="text-danger">{classify.error instanceof ApiError ? classify.error.message : "Couldn't save. Try again."}</span>}
     </div>
   );
 }
@@ -299,6 +304,8 @@ export function Thread() {
   const canOrder = me.data?.permissions.includes("order.write") ?? false;
   const canLead = me.data?.permissions.includes("lead.write") ?? false;
   const canReadLeads = me.data?.permissions.includes("lead.read") ?? false;
+  // With the business rule on, a chat order is always converted from its lead.
+  const directOrders = !(me.data?.orders_need_lead ?? true);
   const [leadSheet, setLeadSheet] = useState<{ note?: string } | null>(null);
 
   const conversation = useQuery({
@@ -364,7 +371,7 @@ export function Thread() {
             <span className="sm:hidden">Lead</span>
           </Button>
         )}
-        {canOrder && !c.open_lead && (
+        {canOrder && directOrders && !c.open_lead && (
           <Link
             href={`/orders/new?conversation=${c.id}`}
             className="inline-flex items-center gap-1.5 rounded-control bg-primary px-3 py-2 text-sm font-medium text-on-primary hover:bg-primary-hover"
@@ -386,7 +393,7 @@ export function Thread() {
       {c.open_lead && canReadLeads ? (
         <LeadStrip leadId={c.open_lead.id} canWrite={canLead} canOrder={canOrder} />
       ) : (
-        canLead && c.classification !== "lead" && <TriageBar conversation={c} onLead={() => setLeadSheet({})} />
+        canLead && c.classification !== "lead" && <TriageBar conversation={c} />
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4 sm:px-6">

@@ -162,7 +162,7 @@ export function CustomerProfile() {
             actions={
               canOrder && (
                 <Link
-                  href={`/orders/new?${c.conversations[0] ? `conversation=${c.conversations[0].id}` : `customer=${c.id}`}`}
+                  href={`/orders/new?${c.conversations[0] && !me.data?.orders_need_lead ? `conversation=${c.conversations[0].id}` : `customer=${c.id}`}`}
                   className="inline-flex min-h-9 items-center gap-1.5 rounded-control border border-line-strong px-3 text-sm font-medium text-ink hover:bg-sunken"
                 >
                   <Plus className="size-4" aria-hidden />

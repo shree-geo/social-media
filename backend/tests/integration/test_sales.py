@@ -169,6 +169,8 @@ async def test_order_from_conversation_lifecycle_stock_and_invoice(
     vat = next(r for r in (await owner.get("/api/v1/tax-rates")).json() if r["name"] == "VAT 13%")
     await owner.patch(f"/api/v1/products/{chair['id']}", json={"tax_rate_id": vat["id"]})
 
+    # This test orders straight from the chat; the default rule (orders go through a lead) is in test_leads.
+    assert (await owner.patch("/api/v1/settings", json={"orders_need_lead": False})).status_code == 200
     headers = key()
     payload = {
         "conversation_id": convo["id"],

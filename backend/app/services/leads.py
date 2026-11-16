@@ -203,6 +203,7 @@ async def create_lead(
     followup_note: str | None = None,
     note: str | None = None,
     request: RequestInfo,
+    allow_no_items: bool = False,  # one-tap "this chat is a lead": products are added on the lead later
 ) -> Lead:
     conversation = None
     channel_account_id = None
@@ -242,7 +243,7 @@ async def create_lead(
 
     tenant = await session.get(Tenant, tenant_id)
     assert tenant is not None
-    rows = await _build_items(session, tenant_id, items)
+    rows = await _build_items(session, tenant_id, items) if items or not allow_no_items else []
     lead = Lead(
         tenant_id=tenant_id,
         lead_number=await numbering.next_number(

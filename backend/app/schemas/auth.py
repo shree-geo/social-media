@@ -56,6 +56,7 @@ class MeResponse(BaseModel):
     permissions: list[str]
     subscription: SubscriptionOut
     memberships: list[MembershipOut]
+    orders_need_lead: bool  # chat orders must be converted from a lead (business setting)
 
 
 class PlatformMeResponse(BaseModel):

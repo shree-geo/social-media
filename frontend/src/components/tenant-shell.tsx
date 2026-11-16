@@ -9,6 +9,7 @@ import {
   Menu,
   Package,
   Plug,
+  Settings,
   ShoppingBag,
   Target,
   X,
@@ -40,6 +41,7 @@ export const NAV: Omit<NavItem, "badge">[] = [
   { href: "/payments", label: "Payments", icon: Wallet, permission: "payment.read", phone: false },
   { href: "/products", label: "Products", icon: Package, permission: "product.read", phone: false },
   { href: "/channels", label: "Channels", icon: Plug, permission: "channel.manage", phone: false },
+  { href: "/settings", label: "Settings", icon: Settings, permission: "settings.manage", phone: false },
 ];
 
 const PHONE_TABS = 4;

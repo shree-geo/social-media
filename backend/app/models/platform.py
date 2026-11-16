@@ -128,6 +128,8 @@ class TenantSettings(Timestamps, Base):
     default_payment_due_days: Mapped[int] = mapped_column(server_default=text("0"))
     allow_negative_stock: Mapped[bool] = mapped_column(server_default=text("true"))
     invoice_footer: Mapped[str | None]
+    # Orders from a WhatsApp or Messenger chat must start as a lead and be converted (no direct "Create order").
+    orders_need_lead: Mapped[bool] = mapped_column(server_default=text("true"))
     extra: Mapped[dict[str, Any]] = mapped_column(server_default=text("'{}'::jsonb"))
 
 

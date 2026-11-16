@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from app.api.deps import verify_csrf
 from app.api.v1 import (
     auth,
+    business_settings,
     channels,
     conversations,
     customers,
@@ -36,6 +37,7 @@ api_router.include_router(orders.router)
 api_router.include_router(fulfilment.router)
 api_router.include_router(public.router)
 api_router.include_router(reports.router)
+api_router.include_router(business_settings.router)
 
 platform_router = APIRouter(prefix="/platform")
 platform_router.include_router(platform_auth.router)

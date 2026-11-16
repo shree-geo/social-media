@@ -102,6 +102,8 @@ export type Me = {
     days_remaining: number | null;
   };
   memberships: { tenant_id: string; business_name: string }[];
+  /** Business rule: orders from a chat must be converted from a lead. */
+  orders_need_lead: boolean;
 };
 
 export type PlatformMe = {
