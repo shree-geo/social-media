@@ -106,3 +106,18 @@ export function ContactCards() {
     </ul>
   );
 }
+
+/** "or call 985-1234567" beside a call to action; nothing when no phone is set. */
+export function CallLine({ className }: { className?: string }) {
+  const { data } = useSiteContact();
+  const phone = data?.support_phone;
+  if (!phone) return null;
+  return (
+    <span className={className}>
+      or call{" "}
+      <a href={`tel:+${phoneDigits(phone)}`} className="tabular font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-primary">
+        {phone}
+      </a>
+    </span>
+  );
+}

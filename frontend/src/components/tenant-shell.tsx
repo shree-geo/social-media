@@ -28,20 +28,37 @@ import { brand } from "@/config/brand";
 import { ApiError, api, type Me } from "@/lib/api";
 import type { ConversationPage } from "@/lib/inbox";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; permission: string | null; phone: boolean; badge?: number };
+type NavGroup = "sell" | "deliver" | "setup" | null;
+type NavItem = {
+  href: string;
+  label: string;
+  icon: LucideIcon;
+  permission: string | null;
+  phone: boolean;
+  group: NavGroup;
+  badge?: number;
+  /** "attention" (marigold) only when a customer is waiting; other counts stay quiet. */
+  badgeTone?: "attention" | "quiet";
+};
+
+const GROUP_LABEL: Record<Exclude<NavGroup, null>, string> = {
+  sell: "Sell",
+  deliver: "Deliver and collect",
+  setup: "Set up",
+};
 
 // ``phone``: may be a phone tab (the first four someone can see); the rest are under "More" there.
-export const NAV: Omit<NavItem, "badge">[] = [
-  { href: "/dashboard", label: "Home", icon: Home, permission: null, phone: true },
-  { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "conversation.read", phone: true },
-  { href: "/leads", label: "Leads", icon: Target, permission: "lead.read", phone: true },
-  { href: "/orders", label: "Orders", icon: ShoppingBag, permission: "order.read", phone: true },
-  { href: "/customers", label: "Customers", icon: Users, permission: "customer.read", phone: true },
-  { href: "/deliveries", label: "Deliveries", icon: Truck, permission: "delivery.read", phone: true },
-  { href: "/payments", label: "Payments", icon: Wallet, permission: "payment.read", phone: false },
-  { href: "/products", label: "Products", icon: Package, permission: "product.read", phone: false },
-  { href: "/channels", label: "Channels", icon: Plug, permission: "channel.manage", phone: false },
-  { href: "/settings", label: "Settings", icon: Settings, permission: "settings.manage", phone: false },
+export const NAV: Omit<NavItem, "badge" | "badgeTone">[] = [
+  { href: "/dashboard", label: "Home", icon: Home, permission: null, phone: true, group: null },
+  { href: "/inbox", label: "Inbox", icon: MessagesSquare, permission: "conversation.read", phone: true, group: "sell" },
+  { href: "/leads", label: "Leads", icon: Target, permission: "lead.read", phone: true, group: "sell" },
+  { href: "/orders", label: "Orders", icon: ShoppingBag, permission: "order.read", phone: true, group: "sell" },
+  { href: "/customers", label: "Customers", icon: Users, permission: "customer.read", phone: true, group: "sell" },
+  { href: "/deliveries", label: "Deliveries", icon: Truck, permission: "delivery.read", phone: true, group: "deliver" },
+  { href: "/payments", label: "Payments", icon: Wallet, permission: "payment.read", phone: false, group: "deliver" },
+  { href: "/products", label: "Products", icon: Package, permission: "product.read", phone: false, group: "setup" },
+  { href: "/channels", label: "Channels", icon: Plug, permission: "channel.manage", phone: false, group: "setup" },
+  { href: "/settings", label: "Settings", icon: Settings, permission: "settings.manage", phone: false, group: "setup" },
 ];
 
 const PHONE_TABS = 4;
@@ -52,7 +69,7 @@ export function splitPhoneNav<T extends Pick<NavItem, "phone">>(items: T[]): { t
   return { tabs, more: items.filter((item) => !tabs.includes(item)) };
 }
 
-const MORE: NavItem = { href: "/more", label: "More", icon: Menu, permission: null, phone: true };
+const MORE: NavItem = { href: "/more", label: "More", icon: Menu, permission: null, phone: true, group: null };
 
 export function useMe() {
   return useQuery({ queryKey: ["me"], queryFn: () => api<Me>("tenant", "GET", "/api/v1/auth/me") });
@@ -78,6 +95,18 @@ function useFollowupCount(enabled: boolean): number {
     refetchInterval: 60_000,
   });
   return (count.data?.overdue ?? 0) + (count.data?.today ?? 0);
+}
+
+/** Deliveries due today or not yet scheduled (a rider sees only their own). */
+function useDeliveryCount(enabled: boolean, rider: boolean): number {
+  const view = rider ? "mine" : "today";
+  const due = useQuery({
+    queryKey: ["deliveries", view, "count"],
+    queryFn: () => api<{ items: unknown[] }>("tenant", "GET", `/api/v1/deliveries?view=${view}&limit=100`),
+    enabled,
+    refetchInterval: 120_000,
+  });
+  return due.data?.items.length ?? 0;
 }
 
 type Notice = { key: string; text: string; href: string };
@@ -119,15 +148,40 @@ function useLeadEvents(enabled: boolean, userId: string | undefined): [Notice[],
 // is only known at request time, and the rest of the shell can still be prerendered.
 function NavLinks({ items, variant }: { items: NavItem[]; variant: "side" | "bottom" }) {
   const pathname = usePathname();
+  if (variant === "side") return <SideGroups items={items} isActive={(href) => pathname.startsWith(href)} />;
   return items.map((item) => (
     <NavLink key={item.href} item={item} variant={variant} active={pathname.startsWith(item.href)} />
   ));
 }
 
+/** Side navigation in groups, each with a small sentence-case heading. */
+function SideGroups({ items, isActive }: { items: NavItem[]; isActive: (href: string) => boolean }) {
+  const groups: { group: NavGroup; items: NavItem[] }[] = [];
+  for (const item of items) {
+    const last = groups[groups.length - 1];
+    if (last && last.group === item.group) last.items.push(item);
+    else groups.push({ group: item.group, items: [item] });
+  }
+  return groups.map(({ group, items: groupItems }) => (
+    <div key={group ?? "top"} className="flex flex-col gap-0.5">
+      {group && <p className="px-3 pt-3 pb-1 text-xs font-medium text-nav-ink-muted/80">{GROUP_LABEL[group]}</p>}
+      {groupItems.map((item) => (
+        <NavLink key={item.href} item={item} variant="side" active={isActive(item.href)} />
+      ))}
+    </div>
+  ));
+}
+
 function NavLink({ item, variant, active }: { item: NavItem; variant: "side" | "bottom"; active: boolean }) {
   const Icon = item.icon;
+  const quiet = item.badgeTone === "quiet";
   const badge = item.badge ? (
-    <span className="tabular min-w-5 rounded-full bg-attention px-1.5 text-center text-xs leading-5 font-semibold text-on-attention">
+    <span
+      className={cx(
+        "tabular min-w-5 rounded-full px-1.5 text-center text-xs leading-5 font-semibold",
+        quiet ? (variant === "side" ? "bg-nav-active text-nav-ink" : "bg-primary-soft text-primary") : "bg-attention text-on-attention",
+      )}
+    >
       {item.badge > 99 ? "99+" : item.badge}
     </span>
   ) : null;
@@ -137,12 +191,12 @@ function NavLink({ item, variant, active }: { item: NavItem; variant: "side" | "
         href={item.href}
         aria-current={active ? "page" : undefined}
         className={cx(
-          "relative flex items-center gap-3 rounded-control px-3 py-2.5 text-base transition-colors",
+          "relative flex items-center gap-3 rounded-control px-3 py-2 text-[0.95rem] transition-colors",
           active ? "bg-nav-active font-semibold text-nav-ink" : "text-nav-ink-muted hover:bg-nav-hover hover:text-nav-ink",
         )}
       >
         {active && <span className="absolute inset-y-2 -left-2 w-1 rounded-r-full bg-nav-marker" aria-hidden />}
-        <Icon className="size-5" aria-hidden />
+        <Icon className="size-[1.15rem]" aria-hidden />
         <span className="flex-1">{item.label}</span>
         {badge}
       </Link>
@@ -163,6 +217,25 @@ function NavLink({ item, variant, active }: { item: NavItem; variant: "side" | "
   );
 }
 
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts.length ? (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase() : "";
+}
+
+const ROLE_NAME: Record<string, string> = {
+  OWNER: "Owner",
+  ADMIN: "Admin",
+  MANAGER: "Manager",
+  SALES: "Sales",
+  ACCOUNTANT: "Accountant",
+  DELIVERY: "Delivery",
+  SUPPORT: "Support",
+};
+
+export function roleName(roles: string[]): string {
+  return roles.map((r) => ROLE_NAME[r] ?? r.charAt(0) + r.slice(1).toLowerCase()).join(", ");
+}
+
 export function TenantShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const me = useMe();
@@ -170,6 +243,9 @@ export function TenantShell({ children }: { children: ReactNode }) {
   const waiting = useWaitingCount(canReadInbox && !me.data?.must_change_password);
   const canReadLeads = (me.data?.permissions.includes("lead.read") ?? false) && !me.data?.must_change_password;
   const followups = useFollowupCount(canReadLeads);
+  const rider = me.data?.roles.includes("DELIVERY") ?? false;
+  const canReadDeliveries = (me.data?.permissions.includes("delivery.read") ?? false) && !me.data?.must_change_password;
+  const deliveriesDue = useDeliveryCount(canReadDeliveries, rider);
   const [notices, dismiss] = useLeadEvents(canReadLeads, me.data?.user_id);
   const loadFailed = me.isError && !(me.error instanceof ApiError && me.error.status === 401);
 
@@ -183,11 +259,12 @@ export function TenantShell({ children }: { children: ReactNode }) {
   const allowed = new Set(me.data?.permissions ?? []);
   const nav: NavItem[] = NAV.filter((item) => item.permission === null || allowed.has(item.permission)).map((item) => ({
     ...item,
-    badge: item.href === "/inbox" ? waiting : item.href === "/leads" ? followups : undefined,
+    badge: item.href === "/inbox" ? waiting : item.href === "/leads" ? followups : item.href === "/deliveries" ? deliveriesDue : undefined,
+    badgeTone: item.href === "/inbox" ? "attention" : "quiet",
   }));
 
-  const { tabs, more } = splitPhoneNav(nav);
-  const phoneNav = more.length ? [...tabs, MORE] : tabs;
+  const { tabs } = splitPhoneNav(nav);
+  const phoneNav = [...tabs, MORE]; // More always shows: it holds your account and Log out
 
   async function logout() {
     await api("tenant", "POST", "/api/v1/auth/logout").catch(() => undefined);
@@ -197,42 +274,44 @@ export function TenantShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-dvh">
       <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col overflow-hidden bg-nav text-nav-ink md:flex">
-        <div className="px-4 pt-5 pb-6">
-          <p className="flex items-center gap-2 text-sm font-semibold text-nav-ink-muted">
-            <BrandMark className="size-7 ring-1 ring-nav-line" />
-            {brand.name}
-          </p>
-          {me.data ? (
-            <p className="mt-3 truncate text-lg font-semibold text-nav-ink">{me.data.business_name}</p>
-          ) : (
-            <span className="mt-4 block h-5 w-36 animate-pulse rounded bg-nav-hover" aria-hidden />
-          )}
+        <div className="mx-3 flex items-center gap-3 border-b border-nav-line px-1 pt-5 pb-4">
+          <BrandMark className="size-9 shrink-0 ring-1 ring-nav-line" />
+          <div className="min-w-0">
+            {me.data ? (
+              <p className="truncate font-semibold text-nav-ink">{me.data.business_name}</p>
+            ) : (
+              <span className="block h-4 w-32 animate-pulse rounded bg-nav-hover" aria-hidden />
+            )}
+            <p className="truncate text-xs text-nav-ink-muted">{brand.name}</p>
+          </div>
         </div>
-        <nav aria-label="Main" className="flex flex-col gap-1 px-2">
-          <Suspense fallback={nav.map((item) => <NavLink key={item.href} item={item} variant="side" active={false} />)}>
+        <nav aria-label="Main" className="flex flex-col gap-1 overflow-y-auto px-2 pt-2">
+          <Suspense fallback={<SideGroups items={nav} isActive={() => false} />}>
             <NavLinks items={nav} variant="side" />
           </Suspense>
         </nav>
-        <div className="mt-auto border-t border-nav-line px-4 py-4">
-          <p className="truncate text-sm font-medium text-nav-ink">{me.data?.full_name ?? "\u00a0"}</p>
-          <p className="truncate text-xs text-nav-ink-muted">{me.data?.email ?? "\u00a0"}</p>
+        <div className="mt-auto flex items-center gap-3 border-t border-nav-line px-4 py-3">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-nav-active text-xs font-semibold text-nav-ink" aria-hidden>
+            {initials(me.data?.full_name ?? "")}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-nav-ink">{me.data?.full_name ?? "\u00a0"}</p>
+            <p className="truncate text-xs text-nav-ink-muted">{me.data ? roleName(me.data.roles) : "\u00a0"}</p>
+          </div>
           <button
             onClick={logout}
-            className="mt-3 inline-flex items-center gap-2 rounded-control text-sm text-nav-ink-muted hover:text-nav-ink"
+            className="grid size-8 shrink-0 place-items-center rounded-control text-nav-ink-muted hover:bg-nav-hover hover:text-nav-ink"
+            aria-label="Log out"
+            title="Log out"
           >
             <LogOut className="size-4" aria-hidden />
-            Log out
           </button>
         </div>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-3 bg-nav px-4 py-3 text-nav-ink md:hidden">
-          <p className="truncate text-base font-semibold">{me.data?.business_name ?? "\u00a0"}</p>
-          <button onClick={logout} className="grid size-10 place-items-center rounded-control text-nav-ink-muted" aria-label="Log out">
-            <LogOut className="size-5" aria-hidden />
-          </button>
-        </header>
+      {/* No top bar on phones: each screen has its own header, and the business name and
+          "Log out" live under More, away from the thumb. */}
+      <div className="flex min-w-0 flex-1 flex-col pt-[env(safe-area-inset-top)] md:pt-0">
         {loadFailed && (
           <p role="alert" className="border-b border-danger/30 bg-danger-soft px-4 py-2 text-sm text-danger">
             We couldn&apos;t load your account. Refresh the page to try again.

@@ -1,12 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Minus, Table2, BarChart3 } from "lucide-react";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { ArrowDownRight, ArrowUpRight, Minus, Table2, BarChart3 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cx } from "@/components/ui";
-import { api } from "@/lib/api";
 import { PERIODS, change, compactMoney, compactNumber, type Dashboard, type Period } from "@/lib/reports";
 import { LOST_REASON_LABEL } from "@/lib/leads";
 import { LEAD_LABEL, SOURCE_LABEL, STATUS_LABEL, formatMoney } from "@/lib/sales";
@@ -58,29 +57,42 @@ function Panel({
 
 function Delta({ current, previous, against }: { current: string | number; previous: string | number; against: string }) {
   const pct = change(current, previous);
-  if (pct === null) return <p className="mt-1 text-xs text-ink-subtle">Nothing to compare with the {against}</p>;
+  if (pct === null) return null; // one note under the strip explains missing comparisons
   const Icon = pct > 0 ? ArrowUpRight : pct < 0 ? ArrowDownRight : Minus;
   return (
     <p className="mt-1 flex items-center gap-1 text-xs text-ink-muted">
       <Icon className={cx("size-3.5", pct > 0 ? "text-success" : pct < 0 ? "text-danger" : "text-ink-subtle")} aria-hidden />
       <span>
-        {pct > 0 ? "Up" : pct < 0 ? "Down" : "Same as"} {pct !== 0 && `${Math.abs(pct)}% vs`} the {against}
+        {pct > 0 ? "Up" : pct < 0 ? "Down" : "Same as"} {pct !== 0 && `${Math.abs(pct)}% on`} the {against}
       </span>
     </p>
   );
 }
 
-function Tile({ label, value, children, href }: { label: string; value: string; children?: ReactNode; href?: string }) {
+/** A figure in a strip: no box of its own; the strip draws the dividers. */
+function Tile({
+  label,
+  value,
+  children,
+  href,
+  tone = "ink",
+}: {
+  label: string;
+  value: string;
+  children?: ReactNode;
+  href?: string;
+  tone?: "ink" | "attention";
+}) {
   const body = (
     <>
       <p className="text-sm text-ink-muted">{label}</p>
-      <p className="mt-1 text-xl font-semibold text-ink sm:text-2xl">{value}</p>
+      <p className={cx("figure mt-1 text-[1.6rem]", tone === "attention" ? "text-attention-ink" : "text-ink")}>{value}</p>
       {children}
     </>
   );
-  const className = "block min-w-0 rounded-panel border border-line bg-surface p-3 sm:p-4";
+  const className = "block min-w-0 px-4 py-3";
   return href ? (
-    <Link href={href} className={cx(className, "transition-colors hover:border-line-strong")}>
+    <Link href={href} className={cx(className, "transition-colors hover:bg-surface")}>
       {body}
     </Link>
   ) : (
@@ -88,7 +100,25 @@ function Tile({ label, value, children, href }: { label: string; value: string; 
   );
 }
 
+function Strip({ children, columns }: { children: ReactNode; columns: string }) {
+  return (
+    <div
+      className={cx(
+        "grid grid-cols-2 border-y border-line [&>*]:border-line max-sm:[&>*:nth-child(even)]:border-l max-sm:[&>*:nth-child(n+3)]:border-t sm:[&>*+*]:border-l",
+        columns,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 /* Sales chart ------------------------------------------------------------------------------ */
+
+/** The window runs up to now (so the last bar is "today so far"). */
+function isCurrent(data: Dashboard): boolean {
+  return new Date(data.window.end).getTime() > Date.now() - 60_000;
+}
 
 function niceMax(max: number): number {
   if (max <= 0) return 1;
@@ -97,7 +127,7 @@ function niceMax(max: number): number {
   return Math.ceil(max / (step * magnitude)) * step * magnitude;
 }
 
-function SalesChart({ data }: { data: Dashboard }) {
+function SalesChart({ data, height = 220 }: { data: Dashboard; height?: number }) {
   const box = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0); // measured before drawing, so the chart never widens its panel
   const [hover, setHover] = useState<number | null>(null);
@@ -111,7 +141,6 @@ function SalesChart({ data }: { data: Dashboard }) {
 
   const points = data.series.map((p) => ({ ...p, value: Number(p.sales) }));
   const top = niceMax(Math.max(...points.map((p) => p.value), 0));
-  const height = 220;
   const pad = { top: 12, right: 8, bottom: 26, left: 56 };
   const plotW = width - pad.left - pad.right;
   const plotH = height - pad.top - pad.bottom;
@@ -123,7 +152,7 @@ function SalesChart({ data }: { data: Dashboard }) {
   const active = hover === null ? null : points[hover];
 
   return (
-    <div ref={box} className="relative h-[220px] w-full min-w-0" onMouseLeave={() => setHover(null)}>
+    <div ref={box} className="relative w-full min-w-0" style={{ height }} onMouseLeave={() => setHover(null)}>
       {width > 0 && (
         <svg width={width} height={height} role="img" aria-label="Sales over the period" className="block">
           {ticks.map((t) => (
@@ -143,7 +172,11 @@ function SalesChart({ data }: { data: Dashboard }) {
                 {h > 0 && (
                   <path
                     d={`M${x},${y(0)} V${y(0) - h + r} Q${x},${y(0) - h} ${x + r},${y(0) - h} H${x + barW - r} Q${x + barW},${y(0) - h} ${x + barW},${y(0) - h + r} V${y(0)} Z`}
-                    className={cx("fill-primary transition-opacity", hover !== null && hover !== i && "opacity-40")}
+                    className={cx(
+                      "transition-opacity",
+                      i === points.length - 1 && data.window.bucket !== "week" && isCurrent(data) ? "fill-attention" : "fill-primary",
+                      hover !== null && hover !== i && "opacity-40",
+                    )}
                   />
                 )}
                 {i % every === 0 && (
@@ -204,35 +237,122 @@ function SalesTable({ data }: { data: Dashboard }) {
   );
 }
 
-function SalesPanel({ data }: { data: Dashboard }) {
-  const [asTable, setAsTable] = useState(false);
-  const empty = data.series.every((p) => Number(p.sales) === 0);
+export function PeriodPicker({ period, onChange }: { period: Period; onChange: (p: Period) => void }) {
   return (
-    <Panel
-      title="Sales"
-      description={`Confirmed orders by ${data.window.bucket}`}
-      action={
-        !empty && (
+    <div className="flex w-full min-w-0 gap-1 overflow-x-auto rounded-control bg-sunken p-1 sm:w-auto" role="tablist" aria-label="Period">
+      {PERIODS.map((p) => (
+        <button
+          key={p.key}
+          role="tab"
+          aria-selected={period === p.key}
+          onClick={() => onChange(p.key)}
+          className={cx(
+            "shrink-0 rounded-[6px] px-3 py-1.5 text-sm font-medium whitespace-nowrap",
+            period === p.key ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink",
+          )}
+        >
+          {p.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+type ReportQuery = UseQueryResult<Dashboard>;
+
+/** The one big number: sales for the period, its change in rupees, and the chart. */
+export function SalesHero({ report, period }: { report: ReportQuery; period: Period }) {
+  const [asTable, setAsTable] = useState(false);
+  const data = report.data;
+  const meta = PERIODS.find((p) => p.key === period)!;
+  if (!data) return <div className="h-72 animate-pulse rounded-panel border border-line bg-surface" aria-hidden />;
+  const empty = data.series.every((p) => Number(p.sales) === 0);
+  const diff = Number(data.totals.sales) - Number(data.previous.sales);
+  const big = Math.abs(Number(data.totals.sales)) >= 1_00_00_000;
+  return (
+    <section className={cx("flex min-w-0 flex-col rounded-panel border border-line bg-surface p-5 transition-opacity", report.isFetching && "opacity-60")}>
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm text-ink-muted">Sales, {meta.label.toLowerCase()}</h2>
+          <p className="figure mt-1 text-[2.6rem] text-ink">
+            {big ? compactMoney(data.totals.sales, data.currency) : formatMoney(data.totals.sales, data.currency)}
+          </p>
+          <p className={cx("mt-1 text-sm font-medium", diff > 0 ? "text-success" : diff < 0 ? "text-danger" : "text-ink-subtle")}>
+            {Number(data.previous.sales) === 0 && diff === 0
+              ? "No sales yet in this or the previous period"
+              : diff === 0
+                ? `Same as the ${meta.previous}`
+                : `${diff > 0 ? "Up" : "Down"} ${formatMoney(Math.abs(diff), data.currency)} on the ${meta.previous}`}
+          </p>
+        </div>
+        {!empty && (
           <button
             onClick={() => setAsTable((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-control px-2 py-1 text-sm text-primary hover:bg-primary-soft"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-control px-2 py-1 text-sm text-primary hover:bg-primary-soft"
           >
             {asTable ? <BarChart3 className="size-4" aria-hidden /> : <Table2 className="size-4" aria-hidden />}
-            {asTable ? "Show chart" : "Show table"}
+            {asTable ? "Chart" : "Table"}
           </button>
-        )
-      }
-    >
-      {empty ? (
-        <p className="grid h-40 place-items-center rounded-control bg-sunken text-sm text-ink-muted">
-          No confirmed sales in this period yet.
-        </p>
-      ) : asTable ? (
-        <SalesTable data={data} />
-      ) : (
-        <SalesChart data={data} />
-      )}
-    </Panel>
+        )}
+      </header>
+      <div className="mt-4 flex-1">
+        {empty ? (
+          <p className="grid h-28 place-items-center rounded-control bg-sunken px-4 text-center text-sm text-ink-muted">
+            The chart fills in as orders are confirmed.
+          </p>
+        ) : asTable ? (
+          <SalesTable data={data} />
+        ) : (
+          <SalesChart data={data} height={170} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** Open orders per stage, each in its stage color, so a pile-up is visible at a glance. */
+function Pipeline({ data }: { data: Dashboard }) {
+  const by = data.snapshot.open_by_status ?? {};
+  const pick = (...statuses: string[]) =>
+    statuses.reduce(
+      (acc, s) => ({ orders: acc.orders + (by[s]?.orders ?? 0), value: acc.value + Number(by[s]?.value ?? 0) }),
+      { orders: 0, value: 0 },
+    );
+  const stages = [
+    { key: "new", label: "New", ...pick("NEW"), className: "bg-stage-new-soft text-stage-new" },
+    { key: "confirmed", label: "Confirmed", ...pick("CONFIRMED", "PROCESSING"), className: "bg-stage-confirmed-soft text-stage-confirmed" },
+    { key: "ready", label: "Ready", ...pick("READY_FOR_DELIVERY"), className: "bg-stage-ready-soft text-stage-ready" },
+    { key: "out", label: "Out for delivery", ...pick("OUT_FOR_DELIVERY"), className: "bg-stage-out-soft text-stage-out" },
+  ];
+  return (
+    <section aria-labelledby="pipeline">
+      <header className="mb-2 flex items-baseline justify-between gap-3">
+        <h2 id="pipeline" className="font-semibold text-ink">
+          Orders in progress
+        </h2>
+        <Link href="/orders" className="rounded-control px-2 py-1 text-sm font-medium text-primary hover:bg-primary-soft">
+          All orders
+        </Link>
+      </header>
+      <ol className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {stages.map((s) => (
+          <li key={s.key} className={cx("rounded-panel px-4 py-3", s.className)}>
+            <p className="text-sm font-semibold">{s.label}</p>
+            <p className="mt-0.5 flex items-baseline gap-2">
+              <span className="figure text-[1.7rem] text-ink">{s.orders}</span>
+              {s.orders > 0 && <span className="tabular text-xs text-ink-muted">{compactMoney(s.value, data.currency)}</span>}
+            </p>
+          </li>
+        ))}
+        <li className="col-span-2 rounded-panel bg-stage-done-soft px-4 py-3 text-stage-done sm:col-span-1">
+          <p className="text-sm font-semibold">Delivered</p>
+          <p className="mt-0.5 flex items-baseline gap-2">
+            <span className="figure text-[1.7rem] text-ink">{data.snapshot.delivered_in_period}</span>
+            <span className="text-xs text-ink-muted">in this period</span>
+          </p>
+        </li>
+      </ol>
+    </section>
   );
 }
 
@@ -353,14 +473,17 @@ function LeadsSection({ data, against }: { data: Dashboard; against: string }) {
   const l = data.leads;
   const reasons = Object.entries(l.lost_reasons);
   return (
-    <>
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+    <section className="grid min-w-0 gap-4" aria-labelledby="leads-heading">
+      <h2 id="leads-heading" className="font-semibold text-ink">
+        Leads
+      </h2>
+      <Strip columns="sm:grid-cols-4">
         <Tile label="New leads" value={compactNumber(data.totals.new_leads)} href="/leads">
           <Delta current={data.totals.new_leads} previous={data.previous.new_leads} against={against} />
         </Tile>
         <Tile label="Win rate" value={l.win_rate === null ? "–" : `${Math.round(l.win_rate * 100)}%`} href="/leads">
           <p className="mt-1 text-xs text-ink-muted">
-            {l.won} won · {l.lost} lost in this period
+            {l.won} won, {l.lost} lost in this period
           </p>
         </Tile>
         <Tile label="Value won" value={compactMoney(l.won_value, data.currency)}>
@@ -370,10 +493,10 @@ function LeadsSection({ data, against }: { data: Dashboard; against: string }) {
           <p className="mt-1 text-xs text-ink-muted">
             {l.avg_days_to_win === null
               ? "Right now"
-              : `Right now · a win takes ${l.avg_days_to_win < 1 ? "under a day" : `${l.avg_days_to_win} days`} on average`}
+              : `Right now. A win takes ${l.avg_days_to_win < 1 ? "under a day" : `${l.avg_days_to_win} days`} on average`}
           </p>
         </Tile>
-      </div>
+      </Strip>
       <div className="grid min-w-0 gap-6 lg:grid-cols-[3fr_2fr]">
         <Panel title="Team" description="Leads each person looks after">
           {l.staff.length === 0 ? (
@@ -423,96 +546,61 @@ function LeadsSection({ data, against }: { data: Dashboard; against: string }) {
           />
         </Panel>
       </div>
-    </>
+    </section>
   );
 }
 
 /* The report ---------------------------------------------------------------------------- */
 
-export function BusinessReport() {
-  const [period, setPeriod] = useState<Period>("7d");
-
-  const report = useQuery({
-    queryKey: ["reports", "dashboard", period],
-    queryFn: () => api<Dashboard>("tenant", "GET", `/api/v1/reports/dashboard?period=${period}`),
-    placeholderData: (previous) => previous,
-  });
+export function BusinessReport({ report, period }: { report: ReportQuery; period: Period }) {
   const data = report.data;
   const against = PERIODS.find((p) => p.key === period)!.previous;
 
   return (
     <div className="grid min-w-0 gap-6" aria-busy={report.isFetching}>
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-ink">How the business is doing</h2>
-        <div className="flex w-full min-w-0 gap-1 overflow-x-auto rounded-control bg-sunken p-1 sm:w-auto" role="tablist" aria-label="Period">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              role="tab"
-              aria-selected={period === p.key}
-              onClick={() => setPeriod(p.key)}
-              className={cx(
-                "shrink-0 rounded-[6px] px-3 py-1.5 text-sm font-medium whitespace-nowrap",
-                period === p.key ? "bg-surface text-ink shadow-sm" : "text-ink-muted hover:text-ink",
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {report.isError && (
         <p className="rounded-control bg-danger-soft px-4 py-3 text-sm text-danger">
           Couldn&apos;t load the figures. Try again in a moment.
         </p>
       )}
       {!data ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-hidden>
-          {Array.from({ length: 8 }, (_, i) => (
-            <div key={i} className="h-28 animate-pulse rounded-panel border border-line bg-surface" />
-          ))}
-        </div>
+        <div className="h-24 animate-pulse rounded-panel bg-sunken" aria-hidden />
       ) : (
-        <div className={cx("grid min-w-0 gap-6 transition-opacity", report.isFetching && "opacity-60")}>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <Tile label="Sales" value={compactMoney(data.totals.sales, data.currency)}>
-              <Delta current={data.totals.sales} previous={data.previous.sales} against={against} />
-            </Tile>
-            <Tile label="Money received" value={compactMoney(data.totals.received, data.currency)} href="/payments">
-              <Delta current={data.totals.received} previous={data.previous.received} against={against} />
-            </Tile>
-            <Tile label="New orders" value={compactNumber(data.totals.new_orders)} href="/orders">
-              <Delta current={data.totals.new_orders} previous={data.previous.new_orders} against={against} />
-            </Tile>
-            <Tile label="Customer messages" value={compactNumber(data.totals.messages_in)} href="/inbox">
-              <Delta current={data.totals.messages_in} previous={data.previous.messages_in} against={against} />
-            </Tile>
+        <div className={cx("grid min-w-0 gap-8 transition-opacity", report.isFetching && "opacity-60")}>
+          <div>
+            <Strip columns="sm:grid-cols-4">
+              <Tile label="Money received" value={compactMoney(data.totals.received, data.currency)} href="/payments">
+                <Delta current={data.totals.received} previous={data.previous.received} against={against} />
+              </Tile>
+              <Tile
+                label="To collect"
+                value={compactMoney(data.snapshot.outstanding, data.currency)}
+                href="/orders"
+                tone={Number(data.snapshot.outstanding) > 0 ? "attention" : "ink"}
+              >
+                <p className="mt-1 text-xs text-ink-muted">
+                  {data.snapshot.outstanding_orders === 0
+                    ? "Nothing owed right now"
+                    : `On ${data.snapshot.outstanding_orders} ${data.snapshot.outstanding_orders === 1 ? "order" : "orders"}, right now`}
+                </p>
+              </Tile>
+              <Tile label="New orders" value={compactNumber(data.totals.new_orders)} href="/orders">
+                <Delta current={data.totals.new_orders} previous={data.previous.new_orders} against={against} />
+              </Tile>
+              <Tile label="Customer messages" value={compactNumber(data.totals.messages_in)} href="/inbox">
+                <Delta current={data.totals.messages_in} previous={data.previous.messages_in} against={against} />
+              </Tile>
+            </Strip>
+            {[
+              [data.totals.received, data.previous.received],
+              [data.totals.new_orders, data.previous.new_orders],
+              [data.totals.messages_in, data.previous.messages_in],
+            ].every(([, prev]) => Number(prev) === 0) && (
+              <p className="mt-2 text-xs text-ink-subtle">Comparisons with the {against} appear once that period has activity.</p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <Tile label="Still to collect" value={compactMoney(data.snapshot.outstanding, data.currency)} href="/orders">
-              <p className="mt-1 text-xs text-ink-muted">
-                On {data.snapshot.outstanding_orders} {data.snapshot.outstanding_orders === 1 ? "order" : "orders"}, right now
-              </p>
-            </Tile>
-            <Tile label="Overdue invoices" value={compactMoney(data.snapshot.overdue, data.currency)} href="/orders">
-              <p className={cx("mt-1 flex items-center gap-1 text-xs", data.snapshot.overdue_invoices ? "text-danger" : "text-ink-muted")}>
-                {data.snapshot.overdue_invoices > 0 && <AlertTriangle className="size-3.5" aria-hidden />}
-                {data.snapshot.overdue_invoices ? `${data.snapshot.overdue_invoices} past the due date` : "Nothing overdue"}
-              </p>
-            </Tile>
-            <Tile label="Orders in progress" value={compactNumber(data.snapshot.open_orders)} href="/orders">
-              <p className="mt-1 text-xs text-ink-muted">New, confirmed or on the way</p>
-            </Tile>
-            <Tile label="Deliveries due" value={compactNumber(data.snapshot.deliveries_due_today)} href="/deliveries">
-              <p className="mt-1 text-xs text-ink-muted">
-                {data.snapshot.deliveries_open} open · {data.snapshot.delivered_in_period} delivered in this period
-              </p>
-            </Tile>
-          </div>
-
-          <SalesPanel data={data} />
+          <Pipeline data={data} />
 
           <LeadsSection data={data} against={against} />
 

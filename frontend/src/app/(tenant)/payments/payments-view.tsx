@@ -29,7 +29,7 @@ export function PaymentsView() {
   const items = payments.data?.pages.flatMap((p) => p.items) ?? [];
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-8 sm:py-8">
+    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
       <PageHeader title="Payments" description="Money received and returned, as recorded on each order." />
       <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
         <select

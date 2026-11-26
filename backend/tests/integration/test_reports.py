@@ -93,6 +93,8 @@ async def test_dashboard_adds_up_chats_orders_payments_and_channels(
     )
     s = d["snapshot"]
     assert (s["open_orders"], s["outstanding_orders"], Decimal(s["outstanding"])) == (3, 2, Decimal("8700"))
+    assert sum(stage["orders"] for stage in s["open_by_status"].values()) == 3
+    assert set(s["open_by_status"]) == {"NEW", "CONFIRMED", "PROCESSING", "READY_FOR_DELIVERY", "OUT_FOR_DELIVERY"}
     assert (s["overdue_invoices"], s["deliveries_open"]) == (0, 0)
     assert d["buyers"] == {"total": 2, "returning": 0}
     assert Decimal(d["previous"]["sales"]) == 0

@@ -12,11 +12,14 @@ function cx(...parts: (string | false | null | undefined)[]): string {
 
 /* Buttons ---------------------------------------------------------------------------- */
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+/** One `primary` per screen, for the next step. `secondary` for other actions,
+ *  `quiet` (text only) inside panels. Marigold is never a button color. */
+type ButtonVariant = "primary" | "secondary" | "quiet" | "ghost" | "danger";
 
 const BUTTON_STYLES: Record<ButtonVariant, string> = {
   primary: "bg-primary text-on-primary hover:bg-primary-hover disabled:opacity-50",
   secondary: "border border-line-strong bg-surface text-ink hover:bg-sunken disabled:opacity-50",
+  quiet: "text-primary hover:bg-primary-soft disabled:opacity-50",
   ghost: "text-ink-muted hover:bg-sunken hover:text-ink disabled:opacity-50",
   danger: "bg-danger text-white hover:opacity-90 disabled:opacity-50",
 };
@@ -263,7 +266,7 @@ export function PageHeader({ title, description, actions }: { title: string; des
   return (
     <header className="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="text-xl font-semibold text-ink sm:text-2xl">{title}</h1>
+        <h1 className="font-display text-2xl font-semibold text-ink sm:text-[2rem]">{title}</h1>
         {description && <p className="mt-1 text-ink-muted">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 gap-2">{actions}</div>}
@@ -318,8 +321,29 @@ const PILL = {
   danger: "bg-danger-soft text-danger",
 } as const;
 
-export function Pill({ tone = "neutral", children }: { tone?: keyof typeof PILL; children: ReactNode }) {
-  return <span className={cx("inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium", PILL[tone])}>{children}</span>;
+/** Order, delivery, payment and lead stages: one color per step, shown with a dot. */
+const STAGE = {
+  new: "bg-stage-new-soft text-stage-new",
+  confirmed: "bg-stage-confirmed-soft text-stage-confirmed",
+  ready: "bg-stage-ready-soft text-stage-ready",
+  out: "bg-stage-out-soft text-stage-out",
+  done: "bg-stage-done-soft text-stage-done",
+  bad: "bg-stage-bad-soft text-stage-bad",
+} as const;
+
+export type StageTone = keyof typeof STAGE;
+export type PillTone = keyof typeof PILL | StageTone;
+
+export function Pill({ tone = "neutral", children }: { tone?: PillTone; children: ReactNode }) {
+  if (tone in STAGE) {
+    return (
+      <span className={cx("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold", STAGE[tone as StageTone])}>
+        <span className="size-1.5 rounded-full bg-current" aria-hidden />
+        {children}
+      </span>
+    );
+  }
+  return <span className={cx("inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium", PILL[tone as keyof typeof PILL])}>{children}</span>;
 }
 
 const SUBSCRIPTION_TONE: Record<string, keyof typeof PILL> = {

@@ -122,7 +122,7 @@ function TestMessage({ connected, since }: { connected: WhatsAppConnected; since
   const first = arrived.data?.items.find((c) => c.last_message_at && new Date(c.last_message_at).getTime() >= since);
   return (
     <section>
-      <h1 className="text-2xl font-semibold text-ink">WhatsApp is connected</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink">WhatsApp is connected</h1>
       <p className="tabular mt-1 text-lg text-ink">{connected.display_phone}</p>
       <div className="mt-3">
         <NameStatus status={connected.name_status} />
@@ -257,7 +257,7 @@ export function WhatsAppWizard() {
 
       {step === "choose" && (
         <section>
-          <h1 className="text-2xl font-semibold text-ink">Connect WhatsApp</h1>
+          <h1 className="font-display text-2xl font-semibold text-ink">Connect WhatsApp</h1>
           <p className="mt-2 text-ink-muted">Customers keep messaging your WhatsApp number as usual; their messages arrive in your inbox.</p>
           <fieldset className="mt-6 grid gap-3">
             <legend className="sr-only">How do you want to connect?</legend>
@@ -311,7 +311,7 @@ export function WhatsAppWizard() {
 
       {step === "finishing" && (
         <section>
-          <h1 className="text-2xl font-semibold text-ink">{error ? "Almost there" : "Finishing setup…"}</h1>
+          <h1 className="font-display text-2xl font-semibold text-ink">{error ? "Almost there" : "Finishing setup…"}</h1>
           {error ? (
             <>
               <div className="mt-6">

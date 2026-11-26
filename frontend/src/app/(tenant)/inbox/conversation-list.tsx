@@ -69,7 +69,7 @@ export function ConversationList() {
     >
       <div className="border-b border-line px-4 pt-4 pb-3">
         <div className="flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-ink">Inbox</h1>
+          <h1 className="font-display text-2xl font-semibold text-ink">Inbox</h1>
           <span className={cx("flex items-center gap-1.5 text-xs", live ? "text-success" : "text-ink-subtle")}>
             <span className={cx("size-2 rounded-full", live ? "bg-success" : "bg-ink-subtle")} aria-hidden />
             {live ? "Live" : "Refreshing every 15s"}
@@ -167,7 +167,13 @@ export function ConversationList() {
                     <span className={cx("truncate text-base", waiting ? "font-semibold text-ink" : "text-ink")}>
                       {c.customer.display_name}
                     </span>
-                    <span className={cx("tabular shrink-0 text-xs", waiting ? "font-semibold text-attention-ink" : "text-ink-subtle")}>
+                    <span
+                      className={cx(
+                        "tabular shrink-0 text-xs",
+                        waiting ? "rounded-full bg-attention-soft px-2 font-semibold text-attention-ink" : "text-ink-subtle",
+                      )}
+                      title={waiting ? "Waiting for a reply" : undefined}
+                    >
                       {formatTime(c.last_message_at)}
                     </span>
                   </span>

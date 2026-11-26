@@ -9,7 +9,7 @@ import { useMe } from "@/components/tenant-shell";
 import { EmptyState, PageHeader, Pill, cx } from "@/components/ui";
 import { api } from "@/lib/api";
 import { formatTime } from "@/lib/inbox";
-import { PAYMENT_LABEL, SOURCE_LABEL, STATUS_LABEL, STATUS_TONE, formatMoney, type OrderSummary } from "@/lib/sales";
+import { PAYMENT_LABEL, PAYMENT_TONE, SOURCE_LABEL, STATUS_LABEL, STATUS_TONE, formatMoney, type OrderSummary } from "@/lib/sales";
 
 const VIEWS = [
   { key: "open", label: "Open" },
@@ -40,7 +40,7 @@ export function OrdersView() {
   const items = orders.data?.pages.flatMap((p) => p.items) ?? [];
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-8 sm:py-8">
+    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
       <PageHeader
         title="Orders"
         description="Orders taken in chats, on the phone or in the shop."
@@ -101,21 +101,47 @@ export function OrdersView() {
         </div>
       ) : (
         <ul className="overflow-hidden rounded-panel border border-line bg-surface">
+          <li
+            aria-hidden
+            className="hidden grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_9.5rem_7rem_8rem] gap-4 border-b border-line bg-sunken/60 px-4 py-2 text-xs font-semibold text-ink-muted md:grid"
+          >
+            <span>Order</span>
+            <span>Customer</span>
+            <span>Status</span>
+            <span>Payment</span>
+            <span className="text-right">Amount</span>
+          </li>
           {items.map((o) => (
             <li key={o.id} className="border-b border-line last:border-b-0">
-              <Link href={`/orders/${o.id}`} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-sunken/60">
+              <Link
+                href={`/orders/${o.id}`}
+                className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-1 px-4 py-3 hover:bg-sunken/60 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1.3fr)_9.5rem_7rem_8rem] md:gap-x-4"
+              >
                 <span className="min-w-0">
                   <span className="flex flex-wrap items-center gap-2">
                     <span className="tabular font-medium text-ink">{o.order_number}</span>
-                    <Pill tone={STATUS_TONE[o.status]}>{STATUS_LABEL[o.status] ?? o.status}</Pill>
+                    <span className="md:hidden">
+                      <Pill tone={STATUS_TONE[o.status]}>{STATUS_LABEL[o.status] ?? o.status}</Pill>
+                    </span>
                   </span>
-                  <span className="block truncate text-sm text-ink-muted">
+                  <span className="block truncate text-sm text-ink-muted md:hidden">
                     {o.customer.display_name} · {SOURCE_LABEL[o.source_channel] ?? o.source_channel}
                   </span>
+                  <span className="hidden text-sm text-ink-subtle md:block">{formatTime(o.created_at)}</span>
+                </span>
+                <span className="hidden min-w-0 md:block">
+                  <span className="block truncate text-ink">{o.customer.display_name}</span>
+                  <span className="block text-sm text-ink-muted">{SOURCE_LABEL[o.source_channel] ?? o.source_channel}</span>
+                </span>
+                <span className="hidden md:block">
+                  <Pill tone={STATUS_TONE[o.status]}>{STATUS_LABEL[o.status] ?? o.status}</Pill>
+                </span>
+                <span className="hidden md:block">
+                  <Pill tone={PAYMENT_TONE[o.payment_status] ?? "new"}>{PAYMENT_LABEL[o.payment_status] ?? o.payment_status}</Pill>
                 </span>
                 <span className="text-right">
                   <span className="tabular block font-semibold text-ink">{formatMoney(o.grand_total, o.currency)}</span>
-                  <span className="block text-xs text-ink-subtle">
+                  <span className="block text-xs text-ink-subtle md:hidden">
                     {PAYMENT_LABEL[o.payment_status]} · {formatTime(o.created_at)}
                   </span>
                 </span>

@@ -2,6 +2,7 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { shortDay } from "./dates";
 
 export type ConversationItem = {
   id: string;
@@ -68,7 +69,7 @@ export type CustomerListItem = {
 
 export const PROVIDER_LABEL: Record<string, string> = { whatsapp: "WhatsApp", messenger: "Messenger" };
 
-/** Short relative time for lists: "now", "5m", "3h", "Yesterday", "12 Oct". */
+/** Short relative time for lists: "now", "5m", "3h", "Yesterday", "11 Kartik". */
 export function formatTime(iso: string | null): string {
   if (!iso) return "";
   const date = new Date(iso);
@@ -79,7 +80,7 @@ export function formatTime(iso: string | null): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString([], { day: "numeric", month: "short" });
+  return shortDay(date);
 }
 
 export function clockTime(iso: string): string {
@@ -94,7 +95,7 @@ export function dayLabel(iso: string): string {
   yesterday.setDate(today.getDate() - 1);
   if (date.toDateString() === today.toDateString()) return "Today";
   if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return date.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+  return `${date.toLocaleDateString("en-GB", { weekday: "long" })}, ${shortDay(date)}`;
 }
 
 /** "21 hours" / "45 minutes" left in the reply window, or null when closed. */

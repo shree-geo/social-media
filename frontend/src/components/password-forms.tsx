@@ -51,7 +51,7 @@ export function LoginForm({ realm, title, intro }: { realm: Realm; title: string
 
   return (
     <>
-      <h1 className="text-2xl font-semibold text-ink">{title}</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink">{title}</h1>
       <p className="mt-1 mb-8 text-ink-muted">{intro}</p>
       <form onSubmit={onSubmit} noValidate>
         {error && <Alert tone="error">{error}</Alert>}
@@ -108,7 +108,7 @@ export function ChangePasswordForm({ realm, firstLogin }: { realm: Realm; firstL
 
   return (
     <>
-      <h1 className="text-2xl font-semibold text-ink">{firstLogin ? "Set your own password" : "Change password"}</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink">{firstLogin ? "Set your own password" : "Change password"}</h1>
       <p className="mt-1 mb-8 text-ink-muted">
         {firstLogin
           ? "Your temporary password works only once. Choose a password only you know."

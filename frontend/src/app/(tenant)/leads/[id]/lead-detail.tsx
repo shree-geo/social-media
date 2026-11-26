@@ -38,6 +38,7 @@ import {
   type StaffMember,
 } from "@/lib/leads";
 import { LEAD_LABEL, SOURCE_LABEL, formatMoney, formatQty } from "@/lib/sales";
+import { dateTime } from "@/lib/dates";
 
 type EditItem = { key: string; variant_id: string | null; description: string; quantity: string; unit_price: string };
 
@@ -346,7 +347,7 @@ function OwnerPanel({ lead }: { lead: Lead }) {
         <div>
           <dt className="text-ink-muted">Created</dt>
           <dd className="text-base text-ink">
-            {new Date(lead.created_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+            {dateTime(lead.created_at)}
             {lead.created_by && <span className="text-ink-muted"> by {lead.created_by.full_name}</span>}
           </dd>
         </div>
@@ -366,7 +367,7 @@ function describe(a: LeadActivity, currency: string): string {
     case "note":
       return "Note";
     case "followup_set":
-      return a.to_value ? `Follow-up set for ${new Date(a.to_value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}` : "Cleared the follow-up";
+      return a.to_value ? `Follow-up set for ${dateTime(a.to_value)}` : "Cleared the follow-up";
     case "items_changed":
       return `Changed the products (now ${formatMoney(a.to_value, currency)})`;
     case "converted":
@@ -413,7 +414,7 @@ function Timeline({ lead, canWrite }: { lead: Lead; canWrite: boolean }) {
               </p>
               {a.event === "note" && a.body && <p className="mt-0.5 rounded-control bg-sunken px-3 py-2 whitespace-pre-wrap text-ink">{a.body}</p>}
               <p className="text-xs text-ink-subtle">
-                {a.actor?.full_name ?? "System"} · {new Date(a.created_at).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}
+                {a.actor?.full_name ?? "System"} · {dateTime(a.created_at)}
               </p>
             </div>
           </li>
@@ -455,7 +456,7 @@ export function LeadDetail() {
       <header className="mb-6 flex flex-wrap items-center gap-4">
         <Avatar name={l.customer.display_name} size="lg" />
         <div className="min-w-0 flex-1">
-          <h1 className="text-xl font-semibold text-ink sm:text-2xl">{l.customer.display_name}</h1>
+          <h1 className="font-display text-xl font-semibold text-ink sm:text-2xl">{l.customer.display_name}</h1>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-muted">
             <span className="tabular">{l.lead_number}</span>
             <Pill tone={STAGE_TONE[l.stage]}>{STAGE_LABEL[l.stage]}</Pill>

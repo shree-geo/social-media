@@ -78,7 +78,7 @@ function Intro({
 }) {
   return (
     <section>
-      <h1 className="text-2xl font-semibold text-ink">Connect your Facebook Page</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink">Connect your Facebook Page</h1>
       <p className="mt-2 text-ink-muted">Messages people send to your Page will arrive in your inbox, and you can reply from here.</p>
       <ol className="mt-6 space-y-3">
         {[
@@ -137,7 +137,7 @@ function ChoosePages({
   if (authorized.pages.length === 0) {
     return (
       <section>
-        <h1 className="text-2xl font-semibold text-ink">No Pages found</h1>
+        <h1 className="font-display text-2xl font-semibold text-ink">No Pages found</h1>
         <Alert tone="warning">{SETUP_ERRORS.no_pages}</Alert>
         <Button onClick={onRetry}>Log in to Facebook again</Button>
       </section>
@@ -146,7 +146,7 @@ function ChoosePages({
 
   return (
     <section>
-      <h1 className="text-2xl font-semibold text-ink">Choose your Page</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink">Choose your Page</h1>
       <p className="mt-2 mb-6 text-ink-muted">
         {authorized.limit === null
           ? "Pick the Pages whose messages should arrive here."
@@ -209,7 +209,7 @@ function Connecting({ results }: { results: PageResult[] | null }) {
   const checks = ["Saving secure access to your Page", "Subscribing to new messages", "Checking everything works"];
   return (
     <section>
-      <h1 className="text-2xl font-semibold text-ink">{results ? "Connection results" : "Connecting…"}</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink">{results ? "Connection results" : "Connecting…"}</h1>
       {!results ? (
         <ul className="mt-6 space-y-3">
           {checks.map((c) => (
@@ -251,7 +251,7 @@ function TestMessage({ pages, since }: { pages: PageResult[]; since: number }) {
   const names = pages.map((p) => p.name).join(" and ");
   return (
     <section>
-      <h1 className="text-2xl font-semibold text-ink">{names} {pages.length > 1 ? "are" : "is"} connected</h1>
+      <h1 className="font-display text-2xl font-semibold text-ink">{names} {pages.length > 1 ? "are" : "is"} connected</h1>
       <p className="mt-2 text-ink-muted">Let&apos;s check messages arrive. From your personal Facebook or Messenger, send &ldquo;Hello&rdquo; to your Page.</p>
       <div className="mt-6 rounded-panel border border-line bg-surface p-5">
         {first ? (

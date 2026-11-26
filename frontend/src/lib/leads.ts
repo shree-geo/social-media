@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 
-import type { Pill } from "@/components/ui";
+import type { StageTone } from "@/components/ui";
+import { shortDay } from "./dates";
 
 export type LeadStage = "NEW" | "CONTACTED" | "INTERESTED" | "NEGOTIATING" | "WON" | "LOST";
 
@@ -25,13 +26,13 @@ export const STAGE_HINT: Record<string, string> = {
   LOST: "Didn't buy",
 };
 
-export const STAGE_TONE: Record<string, Parameters<typeof Pill>[0]["tone"]> = {
-  NEW: "primary",
-  CONTACTED: "neutral",
-  INTERESTED: "attention",
-  NEGOTIATING: "attention",
-  WON: "success",
-  LOST: "danger",
+export const STAGE_TONE: Record<string, StageTone> = {
+  NEW: "new",
+  CONTACTED: "confirmed",
+  INTERESTED: "ready",
+  NEGOTIATING: "out",
+  WON: "done",
+  LOST: "bad",
 };
 
 export const LOST_REASON_LABEL: Record<string, string> = {
@@ -104,7 +105,7 @@ export function isOpen(stage: string): boolean {
   return (OPEN_STAGES as string[]).includes(stage);
 }
 
-/** "Today 4:30 PM", "Tomorrow 10:00 AM", "Fri 2:00 PM", "12 Nov", plus whether it's overdue. */
+/** "Today 4:30 PM", "Tomorrow 10:00 AM", "Fri 2:00 PM", "11 Kartik", plus whether it's overdue. */
 export function followupText(iso: string | null): { text: string; overdue: boolean; today: boolean } | null {
   if (!iso) return null;
   const at = new Date(iso);
@@ -117,7 +118,7 @@ export function followupText(iso: string | null): { text: string; overdue: boole
   else if (dayDiff === 1) text = `Tomorrow ${time}`;
   else if (dayDiff === -1) text = `Yesterday ${time}`;
   else if (dayDiff > 1 && dayDiff < 7) text = `${at.toLocaleDateString([], { weekday: "short" })} ${time}`;
-  else text = at.toLocaleDateString([], { day: "numeric", month: "short" });
+  else text = shortDay(at);
   return { text, overdue: at.getTime() < now.getTime(), today: dayDiff === 0 };
 }
 

@@ -8,11 +8,12 @@ import { useState } from "react";
 
 import { LeadSheet } from "@/components/lead-sheet";
 import { useMe } from "@/components/tenant-shell";
-import { Alert, Avatar, Button, ChannelTag, EmptyState, Panel, Pill, Spinner } from "@/components/ui";
+import { Alert, Avatar, Button, ChannelTag, EmptyState, Panel, Pill, Spinner, cx } from "@/components/ui";
 import { ApiError, api } from "@/lib/api";
 import { formatPhone, formatTime, type Customer360 } from "@/lib/inbox";
 import { STAGE_LABEL, STAGE_TONE, type LeadPage } from "@/lib/leads";
 import { PAYMENT_LABEL, STATUS_LABEL, STATUS_TONE, formatMoney } from "@/lib/sales";
+import { bsDate, dateTime } from "@/lib/dates";
 
 function CustomerLeads({ customer, conversationId }: { customer: { id: string; display_name: string }; conversationId: string | null }) {
   const me = useMe();
@@ -66,7 +67,7 @@ function CustomerLeads({ customer, conversationId }: { customer: { id: string; d
 }
 
 function longDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { dateStyle: "medium" });
+  return bsDate(iso);
 }
 
 export function CustomerProfile() {
@@ -106,7 +107,7 @@ export function CustomerProfile() {
   const channels = [...new Set(c.identities.map((i) => i.provider))];
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-8 sm:py-8">
+    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
       <Link href="/customers" className="mb-4 inline-flex items-center gap-1.5 text-sm text-ink-muted hover:text-ink">
         <ArrowLeft className="size-4" aria-hidden />
         Customers
@@ -115,7 +116,7 @@ export function CustomerProfile() {
       <header className="mb-6 flex flex-wrap items-center gap-4">
         <Avatar name={c.display_name} size="lg" />
         <div className="min-w-0 flex-1">
-          <h1 className="truncate text-2xl font-semibold text-ink">{c.display_name}</h1>
+          <h1 className="font-display truncate text-2xl font-semibold text-ink sm:text-[2rem]">{c.display_name}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-muted">
             {c.phone_e164 && (
               <a href={`tel:${c.phone_e164}`} className="tabular inline-flex items-center gap-1.5 hover:text-ink">
@@ -181,15 +182,15 @@ export function CustomerProfile() {
                 <dl className="mb-4 grid grid-cols-3 gap-3 text-center">
                   <div className="rounded-control bg-sunken px-2 py-3">
                     <dt className="text-xs text-ink-muted">Orders</dt>
-                    <dd className="tabular text-lg font-semibold text-ink">{c.sales.orders}</dd>
+                    <dd className="figure text-xl text-ink">{c.sales.orders}</dd>
                   </div>
                   <div className="rounded-control bg-sunken px-2 py-3">
                     <dt className="text-xs text-ink-muted">Bought</dt>
-                    <dd className="tabular text-lg font-semibold text-ink">{formatMoney(c.sales.total_sales)}</dd>
+                    <dd className="figure text-xl text-ink">{formatMoney(c.sales.total_sales, "NPR")}</dd>
                   </div>
                   <div className="rounded-control bg-sunken px-2 py-3">
                     <dt className="text-xs text-ink-muted">To collect</dt>
-                    <dd className="tabular text-lg font-semibold text-ink">{formatMoney(c.sales.outstanding)}</dd>
+                    <dd className={cx("figure text-xl", Number(c.sales.outstanding) > 0 ? "text-attention-ink" : "text-ink")}>{formatMoney(c.sales.outstanding, "NPR")}</dd>
                   </div>
                 </dl>
                 <ul className="-mx-5 -mb-4 divide-y divide-line border-t border-line">
@@ -272,7 +273,7 @@ export function CustomerProfile() {
               {c.notes.map((n) => (
                 <li key={n.id} className="border-l-2 border-attention pl-3">
                   <p className="text-sm whitespace-pre-wrap text-ink">{n.body}</p>
-                  <p className="mt-0.5 text-xs text-ink-subtle">{new Date(n.created_at).toLocaleString()}</p>
+                  <p className="mt-0.5 text-xs text-ink-subtle">{dateTime(n.created_at)}</p>
                 </li>
               ))}
             </ul>

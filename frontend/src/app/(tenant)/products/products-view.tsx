@@ -456,7 +456,7 @@ export function ProductsView() {
   const canEdit = me.data?.permissions.includes("product.write") ?? false;
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-6 sm:px-8 sm:py-8">
+    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
       <PageHeader
         title="Products"
         description="What you sell, with prices and stock. Orders use these prices."

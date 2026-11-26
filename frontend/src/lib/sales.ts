@@ -1,3 +1,5 @@
+import type { StageTone } from "@/components/ui";
+
 export type Variant = {
   id: string;
   sku: string;
@@ -88,12 +90,21 @@ export type Order = OrderSummary & {
   version: number;
 };
 
-/** 1234567.5 → "12,34,567.50" (South Asian grouping, as on our invoices). */
+/** 1234567.5 → "12,34,567.50", 44500 → "44,500" (lakh grouping, as on our invoices).
+ *  Paisa are shown only when they aren't zero. Pass a currency to prefix "Rs.". */
 export function formatMoney(value: string | number | null | undefined, currency?: string): string {
   if (value === null || value === undefined || value === "") return "";
   const n = typeof value === "number" ? value : Number(value);
-  const text = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
-  return currency ? `${currency === "NPR" ? "Rs." : currency} ${text}` : text;
+  const whole = Math.abs(n - Math.round(n)) < 0.005;
+  const text = new Intl.NumberFormat("en-IN", {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  }).format(whole ? Math.round(n) : n);
+  return currency ? `${currencyPrefix(currency)} ${text}` : text;
+}
+
+export function currencyPrefix(currency: string): string {
+  return currency === "NPR" ? "Rs." : currency;
 }
 
 export function formatQty(value: string | null | undefined): string {
@@ -113,16 +124,24 @@ export const STATUS_LABEL: Record<string, string> = {
   RETURNED: "Returned",
 };
 
-export const STATUS_TONE: Record<string, "neutral" | "primary" | "attention" | "success" | "danger"> = {
-  NEW: "attention",
-  CONFIRMED: "primary",
-  PROCESSING: "primary",
-  READY_FOR_DELIVERY: "primary",
-  OUT_FOR_DELIVERY: "primary",
-  DELIVERED: "success",
-  CANCELLED: "neutral",
-  REJECTED: "neutral",
-  RETURNED: "danger",
+export const STATUS_TONE: Record<string, StageTone> = {
+  NEW: "new",
+  CONFIRMED: "confirmed",
+  PROCESSING: "confirmed",
+  READY_FOR_DELIVERY: "ready",
+  OUT_FOR_DELIVERY: "out",
+  DELIVERED: "done",
+  CANCELLED: "bad",
+  REJECTED: "bad",
+  RETURNED: "bad",
+};
+
+/** Paid green, part paid marigold, unpaid grey, refunded red. Overdue is shown separately. */
+export const PAYMENT_TONE: Record<string, StageTone> = {
+  UNPAID: "new",
+  PARTIAL: "out",
+  PAID: "done",
+  REFUNDED: "bad",
 };
 
 /** Button wording for each next status (verbs, not states). */
@@ -230,15 +249,15 @@ export const DELIVERY_STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Cancelled",
 };
 
-export const DELIVERY_TONE: Record<string, "neutral" | "primary" | "attention" | "success" | "danger"> = {
-  PENDING: "attention",
-  ASSIGNED: "primary",
-  PICKED_UP: "primary",
-  OUT_FOR_DELIVERY: "primary",
-  DELIVERED: "success",
-  FAILED: "danger",
-  RETURNED: "danger",
-  CANCELLED: "neutral",
+export const DELIVERY_TONE: Record<string, StageTone> = {
+  PENDING: "new",
+  ASSIGNED: "confirmed",
+  PICKED_UP: "ready",
+  OUT_FOR_DELIVERY: "out",
+  DELIVERED: "done",
+  FAILED: "bad",
+  RETURNED: "bad",
+  CANCELLED: "bad",
 };
 
 /** Button wording for each next delivery status. */

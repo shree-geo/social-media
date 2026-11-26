@@ -130,8 +130,16 @@ class Funnel:
 
 
 @dataclass
+class StageCount:
+    orders: int
+    value: Decimal
+
+
+@dataclass
 class Snapshot:
     open_orders: int
+    # Open orders per status right now, for the dashboard pipeline. Every open status is present.
+    open_by_status: dict[str, StageCount]
     outstanding: Decimal
     outstanding_orders: int
     overdue: Decimal
@@ -455,6 +463,16 @@ async def _snapshot(session: AsyncSession, tenant_id: uuid.UUID, w: Window, toda
             select(func.count()).where(Order.tenant_id == tenant_id, Order.status.in_(OPEN_ORDER_STATUSES))
         )
     ).scalar_one()
+    by_status = {
+        row.status: StageCount(row.n, row.value)
+        for row in await session.execute(
+            select(
+                Order.status, func.count().label("n"), func.coalesce(func.sum(Order.grand_total), ZERO).label("value")
+            )
+            .where(Order.tenant_id == tenant_id, Order.status.in_(OPEN_ORDER_STATUSES))
+            .group_by(Order.status)
+        )
+    }
     outstanding = (
         await session.execute(
             select(func.coalesce(func.sum(Order.amount_due), ZERO), func.count()).where(
@@ -484,6 +502,7 @@ async def _snapshot(session: AsyncSession, tenant_id: uuid.UUID, w: Window, toda
     ).one()
     return Snapshot(
         open_orders=open_orders,
+        open_by_status={status: by_status.get(status, StageCount(0, ZERO)) for status in OPEN_ORDER_STATUSES},
         outstanding=outstanding[0],
         outstanding_orders=outstanding[1],
         overdue=overdue[0],

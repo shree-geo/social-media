@@ -42,6 +42,21 @@
   --sc-danger: #b93434;
   --sc-danger-soft: #fbe7e7;
 
+  /* Order stages: one color per step, used by chips, the pipeline and the progress line.
+     Payments reuse them: paid = done, part paid = out (marigold), unpaid = new, overdue = bad. */
+  --sc-stage-new: #5b6483;
+  --sc-stage-new-soft: #eceef4;
+  --sc-stage-confirmed: #3a4aa8;
+  --sc-stage-confirmed-soft: #e7eaf7;
+  --sc-stage-ready: #0f6f78;
+  --sc-stage-ready-soft: #dcf1f2;
+  --sc-stage-out: #8a5300;
+  --sc-stage-out-soft: #fdf1dc;
+  --sc-stage-done: #1d7f52;
+  --sc-stage-done-soft: #e2f4ea;
+  --sc-stage-bad: #b93434;
+  --sc-stage-bad-soft: #fbe7e7;
+
   /* Channels */
   --sc-whatsapp: #1a9e55;
   --sc-messenger: #0866ff;
@@ -85,6 +100,18 @@
     --sc-success-soft: #14321f;
     --sc-danger: #f07878;
     --sc-danger-soft: #3a1717;
+    --sc-stage-new: #a7adc9;
+    --sc-stage-new-soft: #262b4c;
+    --sc-stage-confirmed: #a7b3f5;
+    --sc-stage-confirmed-soft: #232b55;
+    --sc-stage-ready: #5fd0d8;
+    --sc-stage-ready-soft: #10353a;
+    --sc-stage-out: #f6c97f;
+    --sc-stage-out-soft: #3a2c12;
+    --sc-stage-done: #4cc48a;
+    --sc-stage-done-soft: #14321f;
+    --sc-stage-bad: #f07878;
+    --sc-stage-bad-soft: #3a1717;
     --sc-whatsapp: #3ccf7a;
     --sc-messenger: #5b9bff;
     --sc-focus: #a7b3f5;
@@ -104,6 +131,10 @@
   /* Mukta covers Devanagari and Latin in one family, so Nepali and English share
      one rhythm. Self-hosted via @fontsource (no runtime calls to Google). */
   --sc-font-sans: "Mukta", ui-sans-serif, system-ui, "Noto Sans Devanagari", "Segoe UI", sans-serif;
+  /* Page titles and large money figures. Anek (Ek Type) covers Devanagari too; set
+     slightly condensed so big rupee amounts stay compact. Used via `font-display`. */
+  --sc-font-display: "Anek Devanagari Variable", "Mukta", ui-sans-serif, system-ui, sans-serif;
+  --sc-display-stretch: 88%;
 
   /* Type scale: minor third (1.2) from a 16px base. */
   --sc-text-xs: 0.8125rem; /* 13px  timestamps, helper text */
@@ -120,7 +151,7 @@
 
   /* Shape: small for controls, larger for containers, round for chat. */
   --sc-radius-control: 8px;
-  --sc-radius-panel: 14px;
+  --sc-radius-panel: 12px;
   --sc-radius-bubble: 18px;
 }
 
@@ -146,6 +177,18 @@
   --color-success-soft: var(--sc-success-soft);
   --color-danger: var(--sc-danger);
   --color-danger-soft: var(--sc-danger-soft);
+  --color-stage-new: var(--sc-stage-new);
+  --color-stage-new-soft: var(--sc-stage-new-soft);
+  --color-stage-confirmed: var(--sc-stage-confirmed);
+  --color-stage-confirmed-soft: var(--sc-stage-confirmed-soft);
+  --color-stage-ready: var(--sc-stage-ready);
+  --color-stage-ready-soft: var(--sc-stage-ready-soft);
+  --color-stage-out: var(--sc-stage-out);
+  --color-stage-out-soft: var(--sc-stage-out-soft);
+  --color-stage-done: var(--sc-stage-done);
+  --color-stage-done-soft: var(--sc-stage-done-soft);
+  --color-stage-bad: var(--sc-stage-bad);
+  --color-stage-bad-soft: var(--sc-stage-bad-soft);
   --color-whatsapp: var(--sc-whatsapp);
   --color-messenger: var(--sc-messenger);
   --color-focus: var(--sc-focus);

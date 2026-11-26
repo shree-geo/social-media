@@ -29,7 +29,7 @@ export function AuthScreen({ children, audience = "business" }: { children: Reac
             <p className="mt-1 text-sm opacity-80 lg:hidden">{brand.statementNe}</p>
           </div>
           <div className="hidden lg:block">
-            <p className="text-3xl leading-tight font-semibold">{brand.statement}</p>
+            <p className="font-display text-4xl leading-[1.05] font-semibold">{brand.statement}</p>
             <p className="mt-3 text-xl opacity-80">{brand.statementNe}</p>
             <ol className="mt-10 grid gap-5">
               {FLOW.map(({ icon: Icon, title, text }) => (

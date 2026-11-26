@@ -121,7 +121,7 @@ export function CustomersView() {
   const canMerge = me.data?.permissions.includes("customer.merge") ?? false;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-8">
+    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
       <PageHeader title="Customers" description="Everyone who has messaged you, on any channel." />
       {canMerge && <Duplicates />}
       <div className="relative mb-4">

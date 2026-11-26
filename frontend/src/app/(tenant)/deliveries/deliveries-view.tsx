@@ -84,7 +84,7 @@ export function DeliveriesView() {
   };
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-8 sm:py-8">
+    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-8 sm:py-8">
       <PageHeader title="Deliveries" description="Send orders out from the order screen; update them here as they go." />
       <div className="mb-4 grid grid-cols-4 rounded-control bg-sunken p-1" role="tablist" aria-label="Show">
         {VIEWS.map((v) => (

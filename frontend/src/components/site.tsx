@@ -17,7 +17,8 @@ const NAV = [
 const BUTTON = "inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-5 font-semibold transition-colors";
 export const PRIMARY_BUTTON = `${BUTTON} bg-primary text-on-primary hover:bg-primary-hover`;
 export const SECONDARY_BUTTON = `${BUTTON} border border-line-strong bg-surface text-ink hover:bg-sunken`;
-export const MARIGOLD_BUTTON = `${BUTTON} bg-nav-marker text-nav hover:opacity-90`;
+/** On indigo bands. Marigold is kept for "someone is waiting", never for buttons. */
+export const ON_INDIGO_BUTTON = `${BUTTON} bg-surface text-primary hover:bg-primary-soft`;
 
 function Logo() {
   return (
@@ -106,7 +107,7 @@ function SiteFooter() {
         </div>
         {columns.map((col) => (
           <div key={col.title}>
-            <p className="text-sm font-semibold tracking-wide text-nav-marker uppercase">{col.title}</p>
+            <p className="text-sm font-semibold text-nav-marker">{col.title}</p>
             <ul className="mt-3 grid gap-2">
               {col.links.map((link) => (
                 <li key={link.href}>
@@ -144,8 +145,8 @@ export function PageIntro({ eyebrow, title, children }: { eyebrow: string; title
   return (
     <section className="border-b border-line bg-surface">
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-        <p className="text-sm font-semibold tracking-wide text-primary uppercase">{eyebrow}</p>
-        <h1 className="mt-2 max-w-3xl text-3xl leading-tight font-bold text-ink sm:text-4xl">{title}</h1>
+        <p className="text-sm font-semibold text-primary">{eyebrow}</p>
+        <h1 className="font-display mt-2 max-w-3xl text-4xl leading-[1.05] font-semibold text-ink sm:text-5xl">{title}</h1>
         {children && <div className="mt-4 max-w-2xl text-lg text-ink-muted">{children}</div>}
       </div>
     </section>
@@ -158,10 +159,10 @@ export function ContactBand() {
     <section className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
       <div className="flex flex-col items-start justify-between gap-6 rounded-panel bg-nav px-6 py-10 text-nav-ink sm:px-10 md:flex-row md:items-center">
         <div>
-          <h2 className="text-2xl font-bold">Ready to sell from your chats?</h2>
+          <h2 className="font-display text-3xl font-semibold">Ready to sell from your chats?</h2>
           <p className="mt-2 text-nav-ink-muted">We set up your account and help you connect Facebook and WhatsApp.</p>
         </div>
-        <Link href="/contact" className={MARIGOLD_BUTTON}>
+        <Link href="/contact" className={ON_INDIGO_BUTTON}>
           Talk to us
         </Link>
       </div>

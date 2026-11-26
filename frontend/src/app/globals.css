@@ -51,3 +51,20 @@
 @utility tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* Display face (page titles). Pair with a size and weight: `font-display text-2xl font-semibold`. */
+@utility font-display {
+  font-family: var(--sc-font-display);
+  font-stretch: var(--sc-display-stretch);
+  letter-spacing: -0.01em;
+}
+
+/* Large money and counts: display face, tabular digits so columns line up. */
+@utility figure {
+  font-family: var(--sc-font-display);
+  font-stretch: var(--sc-display-stretch);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+}

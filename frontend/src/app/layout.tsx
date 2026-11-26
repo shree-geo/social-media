@@ -5,6 +5,7 @@ import "@fontsource/mukta/400.css";
 import "@fontsource/mukta/500.css";
 import "@fontsource/mukta/600.css";
 import "@fontsource/mukta/700.css";
+import "@fontsource-variable/anek-devanagari/wdth.css";
 import "./globals.css";
 import { Providers } from "./providers";
 

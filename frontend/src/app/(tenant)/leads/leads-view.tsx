@@ -302,7 +302,7 @@ export function LeadsView() {
   ];
 
   return (
-    <main className={cx("mx-auto w-full px-4 py-6 sm:px-8 sm:py-8", tab === "board" ? "max-w-[96rem]" : "max-w-4xl")}>
+    <main className={cx("mx-auto w-full px-4 py-6 sm:px-8 sm:py-8", tab === "board" ? "max-w-[96rem]" : "max-w-6xl")}>
       <PageHeader
         title="Leads"
         description="People who are interested in buying. Follow up until they order, or note why they didn't."
